@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Build output
+dist/
+build/
+coverage/
+.angular/
+out/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+.AppleDouble
+.LSOverride
+
+# Testing
+karma.conf.js
+.nyc_output/
+.coverage/
+
+# Cache
+.npm/
+.yarn/cache/
+.cache/
+.eslintcache
+
+# Environment
+.env
+.env.local
+.env.*.local
+.env.prod
+
+# Miscellaneous
+*.bak
+*.tmp
+.history/
+*.orig

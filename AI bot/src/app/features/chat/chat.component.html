@@ -1,0 +1,89 @@
+<div class="chat-container">
+  <!-- API Key Dialog -->
+  <div *ngIf="showApiKeyDialog" class="modal-overlay">
+    <div class="modal">
+      <h3>Set Google Gemini API Key</h3>
+      <p>Enter your Google Gemini API key to enable AI responses.</p>
+      <p class="hint">Get a free key at <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com/app/apikey</a></p>
+      <input 
+        type="password" 
+        [(ngModel)]="tempApiKey" 
+        placeholder="Your API key"
+        class="api-key-input"
+      >
+      <div class="modal-buttons">
+        <button (click)="saveApiKey()" class="btn-primary">Save</button>
+        <button (click)="closeApiKeyDialog()" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <div class="chat-header">
+    <h1>AI Chatbot</h1>
+    <button *ngIf="!apiKeySet" (click)="openApiKeyDialog()" class="btn-settings">⚙️ Setup</button>
+  </div>
+
+  <!-- Character Selection -->
+  <div class="character-selector">
+    <h3>Select Character:</h3>
+    <div class="characters-grid">
+      <button 
+        *ngFor="let char of characters"
+        (click)="selectCharacter(char.id)"
+        [class.active]="char.id === activeCharacterId"
+        class="character-btn"
+      >
+        <div class="char-name">{{ char.name }}</div>
+        <div class="char-personality">{{ char.personality }}</div>
+      </button>
+    </div>
+  </div>
+
+  <!-- Current Character Info -->
+  <div *ngIf="activeCharacterId" class="character-info">
+    <div class="char-details">
+      <h3>{{ getCharacterName(activeCharacterId) }}</h3>
+      <p>{{ getCharacterBackstory(activeCharacterId) }}</p>
+    </div>
+  </div>
+
+  <!-- Messages -->
+  <div class="messages-container">
+    <div *ngFor="let msg of messages" [class.user-message]="msg.sender === 'user'" class="message">
+      <div class="message-content">
+        <strong>{{ msg.sender === 'user' ? 'You' : getCharacterName(msg.characterId) }}:</strong>
+        <p>{{ msg.text }}</p>
+        <small class="timestamp">{{ msg.timestamp | date:'short' }}</small>
+        <button (click)="speakMessage(msg)" class="btn-speak" title="Read aloud">🔊</button>
+      </div>
+    </div>
+    <div *ngIf="isLoading" class="loading-indicator">
+      <p>AI is thinking...</p>
+    </div>
+  </div>
+
+  <!-- Input Area -->
+  <div class="input-area">
+    <div class="input-group">
+      <input 
+        [(ngModel)]="userInput"
+        (keyup.enter)="sendMessage()"
+        placeholder="Type your message..."
+        class="message-input"
+        [disabled]="isLoading"
+      >
+      <button 
+        (click)="sendMessage()"
+        [disabled]="isLoading || !userInput.trim()"
+        class="btn-send"
+      >
+        {{ isLoading ? 'Sending...' : 'Send' }}
+      </button>
+      <button (click)="clearChat()" class="btn-clear">Clear</button>
+    </div>
+    <div *ngIf="!apiKeySet" class="api-warning">
+      ⚠️ Please set your Google Gemini API key to enable AI responses
+    </div>
+  </div>
+</div>
