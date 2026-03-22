@@ -17,16 +17,18 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
+        # Use quotes because of the space in "AI bot"
         run: npm install
+        working-directory: "./AI bot"
 
       - name: Build
-        # Sets base-href to /AI-bot/ so assets load correctly on GitHub Pages
+        # Uses the repository name for the base-href
         run: npx ng build --configuration production --base-href "/AI-bot/"
+        working-directory: "./AI bot"
 
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          # Angular 17+ outputs to dist/<project-name>/browser
-          # If your project name in angular.json is different, update 'AI-bot' below
-          folder: dist/ai-chatbot 
+          # Path combines the subfolder and the build output folder
+          folder: "AI bot/dist/ai-chatbot/browser"
           branch: gh-pages
