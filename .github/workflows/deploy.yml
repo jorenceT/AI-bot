@@ -28,5 +28,5 @@ jobs:
         with:
           # Angular 17+ outputs to dist/<project-name>/browser
           # If your project name in angular.json is different, update 'AI-bot' below
-          folder: dist/AI-bot/browser 
+          folder: dist/ai-chatbot 
           branch: gh-pages
