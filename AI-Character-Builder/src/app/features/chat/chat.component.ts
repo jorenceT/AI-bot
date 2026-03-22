@@ -238,7 +238,7 @@ export class ChatComponent implements OnInit {
 
   openApiKeyDialog(): void {
     this.showApiKeyDialog = true;
-    this.tempApiKey = '';
+    this.tempApiKey = localStorage.getItem('geminiApiKey') || '';
   }
 
   closeApiKeyDialog(): void {

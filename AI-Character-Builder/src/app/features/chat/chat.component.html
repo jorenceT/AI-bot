@@ -11,7 +11,7 @@
       <p>Enter your Google Gemini API key to enable AI responses.</p>
       <p class="hint">Get a free key at <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com/app/apikey</a></p>
       <input
-        type="password"
+        type="text"
         [(ngModel)]="tempApiKey"
         placeholder="Your API key"
         class="api-key-input"
@@ -50,7 +50,12 @@
         </svg>
       </label>
       <button class="control-icon btn-add" (click)="openAddCharacterDialog()" title="Add character">+</button>
-      <button *ngIf="!apiKeySet" (click)="openApiKeyDialog()" class="control-icon btn-settings" title="Setup">S</button>
+      <button (click)="openApiKeyDialog()" class="control-icon btn-settings" title="Setup" aria-label="Setup">
+        <svg class="settings-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M19.14 12.94a7.43 7.43 0 0 0 .05-.94 7.43 7.43 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.12 7.12 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.49-.42h-3.84a.5.5 0 0 0-.49.42l-.36 2.54a7.12 7.12 0 0 0-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.43 7.43 0 0 0-.05.94 7.43 7.43 0 0 0 .05.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.38 1.04.69 1.63.94l.36 2.54a.5.5 0 0 0 .49.42h3.84a.5.5 0 0 0 .49-.42l.36-2.54c.59-.25 1.13-.56 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58z"></path>
+          <circle cx="12" cy="12" r="3.1"></circle>
+        </svg>
+      </button>
     </div>
   </div>
 
