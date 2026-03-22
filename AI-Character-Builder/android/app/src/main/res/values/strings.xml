@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AI Character Builder</string>
+    <string name="title_activity_main">AI Character Builder</string>
+    <string name="package_name">com.aicharacterbuilder.app</string>
+    <string name="custom_url_scheme">com.aicharacterbuilder.app</string>
+</resources>

@@ -107,7 +107,7 @@ export class AIService {
     } catch (error: any) {
       console.error('AI Service Error:', error);
       if (this.isMinuteRateLimitError(error)) {
-        throw new Error('Usage limit reached (6 req/min). Please create a new API key using setup and update in there to continue');
+        throw new Error('Usage limit reached (30 req/min). Please try after 2 mins or create a new API key using setup and update in there to continue');
       }
       throw new Error(`Failed to get AI response: ${error.message}`);
     }
