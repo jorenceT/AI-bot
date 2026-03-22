@@ -2,33 +2,33 @@ name: Build and Deploy to GH Pages
 on:
   push:
     branches:
-      - main
+    - main
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
 
-      - name: Install dependencies
-        # Use quotes because of the space in "AI bot"
-        run: npm install
-        working-directory: "./AI bot"
+    - name: Install dependencies
+      # Use quotes for the directory name with a space
+      run: npm install
+      working-directory: "./AI bot"
 
-      - name: Build
-        # Uses the repository name for the base-href
-        run: npx ng build --configuration production --base-href "/AI-bot/"
-        working-directory: "./AI bot"
+    - name: Build
+      # Ensure --base-href matches your repo name: /AI-bot/
+      run: npx ng build --configuration production --base-href "/AI-bot/"
+      working-directory: "./AI bot"
 
-      - name: Deploy
-        uses: JamesIves/github-pages-deploy-action@v4
-        with:
-          # Path combines the subfolder and the build output folder
-          folder: "AI bot/dist/ai-chatbot/browser"
-          branch: gh-pages
+    - name: Deploy
+      uses: JamesIves/github-pages-deploy-action@v4
+      with:
+        # Combined path: Subfolder + dist folder + browser folder
+        folder: "AI bot/dist/ai-chatbot/browser"
+        branch: gh-pages
