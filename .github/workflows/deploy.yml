@@ -29,6 +29,6 @@ jobs:
     - name: Deploy
       uses: JamesIves/github-pages-deploy-action@v4
       with:
-        # Combined path: Subfolder + dist folder + browser folder
-        folder: "AI bot/dist/ai-chatbot/browser"
+        # Combined path: Subfolder + dist folder
+        folder: "AI bot/dist/ai-chatbot"
         branch: gh-pages
