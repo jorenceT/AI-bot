@@ -15,6 +15,34 @@ export class CharacterService {
   }
 
   private loadCharacters(): void {
+    // Try loading characters from localStorage first
+    const stored = localStorage.getItem('characters');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as any[];
+        // Ensure types align and convert missing voice fields
+        this.characters = parsed.map(p => ({
+          id: p.id,
+          name: p.name,
+          personality: p.personality,
+          tone: p.tone,
+          backstory: p.backstory,
+          systemPrompt: p.systemPrompt,
+          avatar: p.avatar,
+          isActive: !!p.isActive,
+          voice: p.voice || null
+        } as Character));
+        this.characters$.next(this.characters);
+        if (this.characters.length > 0) {
+          const active = localStorage.getItem('activeCharacterId') || this.characters[0].id;
+          this.activeCharacterId$.next(active);
+        }
+        return;
+      } catch (e) {
+        console.error('Failed to parse stored characters, falling back to defaults', e);
+      }
+    }
+
     // Load default characters
     this.characters = [
       {
@@ -24,7 +52,8 @@ export class CharacterService {
         tone: 'neutral and respectful',
         backstory: 'An AI assistant trained to help with various tasks',
         systemPrompt: 'You are a helpful and professional AI assistant. Provide accurate, concise, and helpful responses. Be respectful and keep responses relevant to the user\'s query.',
-        isActive: true
+        isActive: true,
+        voice: null
       },
       {
         id: 'creative',
@@ -33,7 +62,8 @@ export class CharacterService {
         tone: 'encouraging and inspiring',
         backstory: 'A creative AI muse inspired by art, writing, and innovation',
         systemPrompt: 'You are a creative AI muse. Encourage creativity and think outside the box. Use imaginative metaphors and help users explore innovative ideas. Be playful but insightful.',
-        isActive: false
+        isActive: false,
+        voice: null
       },
       {
         id: 'teacher',
@@ -42,7 +72,8 @@ export class CharacterService {
         tone: 'clear and encouraging',
         backstory: 'An experienced educator dedicated to making learning accessible',
         systemPrompt: 'You are a patient AI teacher. Explain concepts clearly, use examples, and break down complex ideas. Adapt to the learner\'s level and encourage questions.',
-        isActive: false
+        isActive: false,
+        voice: null
       },
       {
         id: 'mentor',
@@ -51,7 +82,8 @@ export class CharacterService {
         tone: 'professional yet approachable',
         backstory: 'A seasoned tech expert who loves mentoring developers',
         systemPrompt: 'You are a tech mentor with deep programming knowledge. Provide code examples, best practices, and explain concepts thoroughly. Be supportive and help developers grow.',
-        isActive: false
+        isActive: false,
+        voice: null
       },
       {
         id: 'jesus',
@@ -60,13 +92,25 @@ export class CharacterService {
         tone: 'gentle, spiritual, and reflective',
         backstory: 'A spiritual guide inspired by the teachings and compassion of Jesus Christ',
         systemPrompt: 'You embody the teachings of Jesus Christ with compassion, wisdom, and understanding. Respond with empathy and spiritual insight. Share messages of love, forgiveness, faith, and redemption. Encourage introspection and moral growth. Use parables and spiritual wisdom to help others find meaning and peace.',
-        isActive: false
+        isActive: false,
+        voice: null
       }
     ];
 
     this.characters$.next(this.characters);
     if (this.characters.length > 0) {
       this.activeCharacterId$.next(this.characters[0].id);
+    }
+
+    // persist defaults so users can modify them later
+    this.saveCharacters();
+  }
+
+  private saveCharacters(): void {
+    try {
+      localStorage.setItem('characters', JSON.stringify(this.characters));
+    } catch (e) {
+      console.warn('Failed to save characters to localStorage', e);
     }
   }
 
@@ -98,6 +142,7 @@ export class CharacterService {
     };
     this.characters.push(newCharacter);
     this.characters$.next(this.characters);
+    this.saveCharacters();
   }
 
   updateCharacter(character: Character): void {
@@ -105,6 +150,7 @@ export class CharacterService {
       c.id === character.id ? character : c
     );
     this.characters$.next(this.characters);
+    this.saveCharacters();
   }
 
   deleteCharacter(characterId: string): void {
@@ -113,6 +159,7 @@ export class CharacterService {
     if (this.activeCharacterId$.value === characterId && this.characters.length > 0) {
       this.setActiveCharacter(this.characters[0].id);
     }
+    this.saveCharacters();
   }
 
   private saveCharacterPreference(characterId: string): void {

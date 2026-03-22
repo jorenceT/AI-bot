@@ -15,6 +15,8 @@ export interface Character {
   systemPrompt: string;
   avatar?: string;
   isActive: boolean;
+  // optional voice name selected for this character (browser voice.name)
+  voice?: string | null;
 }
 
 export interface ChatSession {

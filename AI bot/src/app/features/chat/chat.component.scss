@@ -26,6 +26,7 @@
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
   width: 90%;
   max-width: 400px;
+  box-sizing: border-box;
 
   h3 {
     margin-top: 0;
@@ -51,6 +52,81 @@
       }
     }
   }
+}
+
+.selector-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-add {
+  background: #2d9cdb;
+  color: white;
+  border: none;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.btn-small {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.9rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-danger {
+  background: #e74c3c;
+  color: white;
+}
+
+.btn-edit {
+  background: rgba(255,255,255,0.08);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.08);
+  padding: 0.45rem 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* Modal form improvements */
+.modal {
+  max-width: 700px; /* wider modal for better layout */
+}
+
+.modal .form-row {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.modal .form-row label {
+  width: 140px;
+  font-weight: 600;
+  color: #333;
+}
+
+.modal .form-row input,
+.modal .form-row textarea,
+.modal .form-row select {
+  flex: 1;
+  padding: 0.6rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+
+.modal .form-row textarea { height: auto; min-height: 64px; }
+
+.modal .modal-buttons {
+  justify-content: flex-end;
+}
+
+@media (max-width: 700px) {
+  .modal .form-row { flex-direction: column; align-items: stretch; }
+  .modal .form-row label { width: 100%; margin-bottom: 0.25rem; }
 }
 
 .api-key-input {
@@ -131,6 +207,7 @@
   cursor: pointer;
   transition: all 0.3s ease;
   text-align: left;
+  position: relative;
 
   &:hover {
     transform: translateY(-2px);
@@ -151,6 +228,25 @@
   .char-personality {
     font-size: 0.85rem;
     color: #666;
+  }
+
+  .char-delete {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(0,0,0,0.06);
+    border: none;
+    padding: 0.35rem 0.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.15s ease, transform 0.08s ease;
+  }
+
+  .char-delete:hover {
+    background: rgba(231, 76, 60, 0.9);
+    color: white;
+    transform: translateY(-1px);
   }
 }
 

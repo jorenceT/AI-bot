@@ -21,22 +21,32 @@
   <!-- Header -->
   <div class="chat-header">
     <h1>AI Chatbot</h1>
-    <button *ngIf="!apiKeySet" (click)="openApiKeyDialog()" class="btn-settings">⚙️ Setup</button>
+    <div class="header-controls">
+      <label class="voice-toggle">
+        <input type="checkbox" [(ngModel)]="autoVoiceEnabled" (change)="saveAutoVoiceSetting()" />
+        Auto Voice
+      </label>
+      <button class="btn-add" (click)="openAddCharacterDialog()">➕ Add Character</button>
+      <button *ngIf="!apiKeySet" (click)="openApiKeyDialog()" class="btn-settings">⚙️ Setup</button>
+    </div>
   </div>
 
   <!-- Character Selection -->
   <div class="character-selector">
     <h3>Select Character:</h3>
     <div class="characters-grid">
-      <button 
+      <div 
         *ngFor="let char of characters"
         (click)="selectCharacter(char.id)"
+        (keyup.enter)="selectCharacter(char.id)"
         [class.active]="char.id === activeCharacterId"
         class="character-btn"
+        tabindex="0"
       >
+        <button class="char-delete" title="Delete character" (click)="$event.stopPropagation(); deleteCharacter(char.id)">🗑️</button>
         <div class="char-name">{{ char.name }}</div>
         <div class="char-personality">{{ char.personality }}</div>
-      </button>
+      </div>
     </div>
   </div>
 
@@ -45,6 +55,48 @@
     <div class="char-details">
       <h3>{{ getCharacterName(activeCharacterId) }}</h3>
       <p>{{ getCharacterBackstory(activeCharacterId) }}</p>
+      <div class="char-actions">
+        <button class="btn-edit" (click)="openEditCharacterDialog(activeCharacterId)">✏️ Edit Character</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Character Add/Edit Dialog -->
+  <div *ngIf="showCharacterDialog" class="modal-overlay">
+    <div class="modal">
+      <h3>{{ editingCharacter ? 'Edit Character' : 'Add Character' }}</h3>
+      <div class="form-row">
+        <label>Name</label>
+        <input [(ngModel)]="tempCharacter.name" placeholder="Character name" />
+      </div>
+      <div class="form-row">
+        <label>Personality</label>
+        <input [(ngModel)]="tempCharacter.personality" placeholder="e.g. compassionate and wise" />
+      </div>
+      <div class="form-row">
+        <label>Tone</label>
+        <input [(ngModel)]="tempCharacter.tone" placeholder="e.g. gentle, reflective" />
+      </div>
+      <div class="form-row">
+        <label>Backstory</label>
+        <textarea [(ngModel)]="tempCharacter.backstory" rows="3"></textarea>
+      </div>
+      <div class="form-row">
+        <label>System Prompt</label>
+        <textarea [(ngModel)]="tempCharacter.systemPrompt" rows="3"></textarea>
+      </div>
+      <div class="form-row" *ngIf="voices && voices.length">
+        <label>Voice</label>
+        <select [(ngModel)]="tempCharacter.voice">
+          <option value="">(auto)</option>
+          <option *ngFor="let v of voices" [value]="v.name">{{ v.name }} ({{ v.lang }})</option>
+        </select>
+      </div>
+      <div class="modal-buttons">
+        <button (click)="saveCharacter()" class="btn-primary">{{ editingCharacter ? 'Save' : 'Add' }}</button>
+        <button (click)="closeCharacterDialog()" class="btn-secondary">Cancel</button>
+        <button *ngIf="editingCharacter" (click)="deleteCharacter(editingCharacter.id)" class="btn-danger">Delete</button>
+      </div>
     </div>
   </div>
 
@@ -55,7 +107,10 @@
         <strong>{{ msg.sender === 'user' ? 'You' : getCharacterName(msg.characterId) }}:</strong>
         <p>{{ msg.text }}</p>
         <small class="timestamp">{{ msg.timestamp | date:'short' }}</small>
-        <button (click)="speakMessage(msg)" class="btn-speak" title="Read aloud">🔊</button>
+        <!-- Show Speak button when not currently speaking this message -->
+        <button *ngIf="currentSpeakingMessageId !== msg.id && msg.sender === 'ai'" (click)="speakMessage(msg)" class="btn-speak" title="Read aloud">🔊</button>
+        <!-- Show Stop button when this message is currently being spoken -->
+        <button *ngIf="currentSpeakingMessageId === msg.id" (click)="stopSpeaking()" class="btn-stop" title="Stop speaking">⏹ Stop</button>
       </div>
     </div>
     <div *ngIf="isLoading" class="loading-indicator">
