@@ -14,7 +14,7 @@ You should have Node.js 18+ and npm 9+
 
 ### 1. Install Dependencies
 ```bash
-cd "c:\coding\AI bot"
+cd "c:\coding\AI-Character-Builder"
 npm install
 ```
 This will download all required packages (~300+ MB). Wait for it to complete.

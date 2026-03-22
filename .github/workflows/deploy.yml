@@ -19,16 +19,16 @@ jobs:
     - name: Install dependencies
       # Use quotes for the directory name with a space
       run: npm install
-      working-directory: "./AI bot"
+      working-directory: "./AI-Character-Builder"
 
     - name: Build
       # Ensure --base-href matches your repo name: /AI-bot/
       run: npx ng build --configuration production --base-href "/AI-bot/"
-      working-directory: "./AI bot"
+      working-directory: "./AI-Character-Builder"
 
     - name: Deploy
       uses: JamesIves/github-pages-deploy-action@v4
       with:
         # Combined path: Subfolder + dist folder
-        folder: "AI bot/dist/ai-chatbot"
+        folder: "AI-Character-Builder/dist/ai-chatbot"
         branch: gh-pages

@@ -4,7 +4,7 @@
 
 ## 1️⃣ Install Dependencies
 ```bash
-cd "c:\coding\AI bot"
+cd "c:\coding\AI-Character-Builder"
 npm install
 ```
 
