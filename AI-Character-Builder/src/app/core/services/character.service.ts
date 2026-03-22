@@ -142,6 +142,7 @@ export class CharacterService {
     };
     this.characters.push(newCharacter);
     this.characters$.next(this.characters);
+    this.setActiveCharacter(newCharacter.id);
     this.saveCharacters();
   }
 

@@ -1,11 +1,15 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
 import { Message, Character } from '../../core/models/ai.models';
 import { ChatService } from '../../core/services/chat.service';
 import { CharacterService } from '../../core/services/character.service';
-import { AIService } from '../../core/services/ai.service';
+import { AIService, CharacterVoiceProfile } from '../../core/services/ai.service';
+
+interface RuntimeVoiceProfile extends CharacterVoiceProfile {
+  updatedAt: number;
+}
 
 @Component({
   selector: 'app-chat',
@@ -21,16 +25,23 @@ export class ChatComponent implements OnInit {
   messages: Message[] = [];
   characters: Character[] = [];
   activeCharacterId = '';
-  
+
   userInput = '';
   isLoading = false;
   apiKeySet = false;
   showApiKeyDialog = false;
   tempApiKey = '';
+  popupMessage = '';
+  popupType: 'error' | 'success' | 'info' = 'info';
+  showPopup = false;
+  private popupTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  isCharacterSectionCollapsed = false;
   autoVoiceEnabled = true; // whether AI responses should be spoken automatically
   currentSpeakingMessageId: string | null = null; // id of the message currently being spoken
   voices: SpeechSynthesisVoice[] = [];
   preferredVoice: SpeechSynthesisVoice | null = null;
+  aiVoiceProfiles: Record<string, RuntimeVoiceProfile> = {};
+  pendingVoiceProfileIds = new Set<string>();
   // Per-character voice preference substrings (searched in voice.name or voice.lang)
   characterVoicePreferences: Record<string, string[]> = {
     // calmer, lower voice
@@ -57,7 +68,8 @@ export class ChatComponent implements OnInit {
   constructor(
     private chatService: ChatService,
     private characterService: CharacterService,
-    private aiService: AIService
+    private aiService: AIService,
+    private cdr: ChangeDetectorRef
   ) {
     this.messages$ = this.chatService.getMessages();
     this.characters$ = this.characterService.getCharacters();
@@ -72,17 +84,21 @@ export class ChatComponent implements OnInit {
 
     this.characters$.subscribe(chars => {
       this.characters = chars;
+      this.refreshVoiceProfiles();
+      this.cdr.detectChanges();
     });
 
     this.activeCharacterId$.subscribe(id => {
       this.activeCharacterId = id;
       this.chatService.switchCharacter(id);
+      this.cdr.detectChanges();
     });
 
     this.checkApiKey();
     this.loadAutoVoiceSetting();
     this.loadVoices();
     this.loadVoiceSelections();
+    this.loadVoiceProfiles();
   }
 
   // Load persisted per-character voice selections from localStorage
@@ -95,6 +111,18 @@ export class ChatComponent implements OnInit {
     } catch (e) {
       console.warn('Could not load character voice selections', e);
       this.characterVoiceSelection = {};
+    }
+  }
+
+  loadVoiceProfiles(): void {
+    try {
+      const raw = localStorage.getItem('characterAiVoiceProfiles');
+      if (raw) {
+        this.aiVoiceProfiles = JSON.parse(raw) || {};
+      }
+    } catch (e) {
+      console.warn('Could not load AI voice profiles', e);
+      this.aiVoiceProfiles = {};
     }
   }
 
@@ -138,7 +166,7 @@ export class ChatComponent implements OnInit {
     // basic validation
     const name = (this.tempCharacter.name || '').trim();
     if (!name) {
-      alert('Please provide a character name');
+      this.openPopup('Please provide a character name', 'error');
       return;
     }
 
@@ -166,6 +194,9 @@ export class ChatComponent implements OnInit {
       delete this.characterVoiceSelection[character.id];
     }
     this.saveVoiceSelection(character.id);
+    delete this.aiVoiceProfiles[character.id];
+    this.saveVoiceProfiles();
+    void this.ensureVoiceProfile(character.id);
 
     this.closeCharacterDialog();
   }
@@ -175,6 +206,8 @@ export class ChatComponent implements OnInit {
     this.characterService.deleteCharacter(characterId);
     delete this.characterVoiceSelection[characterId];
     this.saveVoiceSelection(characterId);
+    delete this.aiVoiceProfiles[characterId];
+    this.saveVoiceProfiles();
     this.closeCharacterDialog();
   }
 
@@ -188,6 +221,14 @@ export class ChatComponent implements OnInit {
       }
     } catch (e) {
       console.warn('Could not save character voice selection', e);
+    }
+  }
+
+  saveVoiceProfiles(): void {
+    try {
+      localStorage.setItem('characterAiVoiceProfiles', JSON.stringify(this.aiVoiceProfiles));
+    } catch (e) {
+      console.warn('Could not save AI voice profiles', e);
     }
   }
 
@@ -205,19 +246,24 @@ export class ChatComponent implements OnInit {
     this.tempApiKey = '';
   }
 
+  toggleCharacterSection(): void {
+    this.isCharacterSectionCollapsed = !this.isCharacterSectionCollapsed;
+  }
+
   saveApiKey(): void {
     if (this.tempApiKey.trim()) {
       this.aiService.setApiKey(this.tempApiKey);
       this.apiKeySet = true;
       this.showApiKeyDialog = false;
       this.tempApiKey = '';
+      this.refreshVoiceProfiles();
     }
   }
 
   async sendMessage(): Promise<void> {
     if (!this.userInput.trim()) return;
     if (!this.apiKeySet) {
-      alert('Please set your Google Gemini API key first');
+      this.openPopup('Please set your Google Gemini API key first', 'error');
       return;
     }
 
@@ -259,15 +305,19 @@ export class ChatComponent implements OnInit {
       }
 
     } catch (error: any) {
-      alert('Error: ' + error.message);
+      this.openPopup(error?.message || 'Something went wrong', 'error');
       console.error('Error:', error);
     } finally {
       this.isLoading = false;
     }
   }
 
-  selectCharacter(characterId: string): void {
-    this.characterService.setActiveCharacter(characterId);
+  selectCharacter(event: Event): void {
+    const target = event.target as HTMLSelectElement | null;
+    if (target) {
+      const characterId = target.value;
+      this.characterService.setActiveCharacter(characterId);
+    }
   }
 
   clearChat(): void {
@@ -291,7 +341,9 @@ export class ChatComponent implements OnInit {
     return this.characters.find(c => c.id === characterId)?.backstory || '';
   }
 
-  speakMessage(msg: Message): void {
+  async speakMessage(msg: Message): Promise<void> {
+    await this.ensureVoiceProfile(msg.characterId);
+
     // Cancel any ongoing speech and set current speaking id
     try {
       window.speechSynthesis.cancel();
@@ -307,23 +359,10 @@ export class ChatComponent implements OnInit {
 
     const character = this.characters.find(c => c.id === msg.characterId);
 
-    // base pitch and rate per character with subtle randomness for variation
-    let basePitch = 1;
-    let baseRate = 1;
-    if (character) {
-      switch (character.id) {
-        case 'jesus':
-          basePitch = 0.95; baseRate = 0.95; break;
-        case 'creative':
-          basePitch = 1.15; baseRate = 1.05; break;
-        case 'teacher':
-          basePitch = 0.98; baseRate = 0.95; break;
-        case 'mentor':
-          basePitch = 0.9; baseRate = 1.0; break;
-        default:
-          basePitch = 1; baseRate = 1;
-      }
-    }
+    const speechSettings = this.getSpeechSettings(msg.characterId, character);
+    const basePitch = speechSettings.pitch;
+    const baseRate = speechSettings.rate;
+    const baseVolume = speechSettings.volume;
 
     const synth = window.speechSynthesis;
     let isCancelled = false;
@@ -339,11 +378,11 @@ export class ChatComponent implements OnInit {
       const u = new SpeechSynthesisUtterance(text);
 
       // apply slight random variation to avoid monotony
-      const randomPitch = basePitch + (Math.random() - 0.5) * 0.08; // ±0.04
-      const randomRate = baseRate + (Math.random() - 0.5) * 0.08;
+      const randomPitch = basePitch + (Math.random() - 0.5) * 0.05; // ±0.04
+      const randomRate = baseRate + (Math.random() - 0.5) * 0.04;
       u.pitch = Math.max(0.7, Math.min(2, randomPitch));
-      u.rate = Math.max(0.6, Math.min(1.5, randomRate));
-      u.volume = 1;
+      u.rate = Math.max(0.75, Math.min(1.25, randomRate));
+      u.volume = baseVolume;
 
       // pick voice for this character if possible, otherwise use preferredVoice
       const v = this.getVoiceForCharacter(msg.characterId) || this.preferredVoice;
@@ -379,6 +418,7 @@ export class ChatComponent implements OnInit {
       const setVoices = () => {
         this.voices = synth.getVoices() || [];
         this.selectPreferredVoice();
+        this.refreshVoiceProfiles();
       };
 
       setVoices();
@@ -428,6 +468,12 @@ export class ChatComponent implements OnInit {
         if (foundByName) return foundByName;
       }
 
+      const aiProfile = this.aiVoiceProfiles[characterId];
+      if (aiProfile) {
+        const aiMatch = this.findVoiceByProfile(aiProfile);
+        if (aiMatch) return aiMatch;
+      }
+
       const prefs = this.characterVoicePreferences[characterId];
       if (!prefs || prefs.length === 0) return null;
 
@@ -443,6 +489,140 @@ export class ChatComponent implements OnInit {
     } catch (e) {
       return null;
     }
+  }
+
+  private getSpeechSettings(characterId: string, character?: Character): { pitch: number; rate: number; volume: number } {
+    const aiProfile = this.aiVoiceProfiles[characterId];
+    if (aiProfile) {
+      return {
+        pitch: aiProfile.pitch,
+        rate: aiProfile.rate,
+        volume: aiProfile.volume
+      };
+    }
+
+    if (character) {
+      switch (character.id) {
+        case 'jesus':
+          return { pitch: 0.95, rate: 0.95, volume: 1 };
+        case 'creative':
+          return { pitch: 1.08, rate: 1.04, volume: 1 };
+        case 'teacher':
+          return { pitch: 0.98, rate: 0.94, volume: 1 };
+        case 'mentor':
+          return { pitch: 0.92, rate: 0.98, volume: 1 };
+        default:
+          return { pitch: 1, rate: 1, volume: 1 };
+      }
+    }
+
+    return { pitch: 1, rate: 1, volume: 1 };
+  }
+
+  private findVoiceByProfile(profile: CharacterVoiceProfile): SpeechSynthesisVoice | null {
+    const scored = this.voices
+      .map(voice => ({
+        voice,
+        score: this.scoreVoice(voice, profile)
+      }))
+      .sort((a, b) => b.score - a.score);
+
+    return scored[0] && scored[0].score > 0 ? scored[0].voice : null;
+  }
+
+  private scoreVoice(voice: SpeechSynthesisVoice, profile: CharacterVoiceProfile): number {
+    let score = 0;
+    const voiceName = (voice.name || '').toLowerCase();
+    const voiceLang = (voice.lang || '').toLowerCase();
+
+    profile.voiceHints.forEach((hint, index) => {
+      const normalizedHint = hint.toLowerCase();
+      if (normalizedHint && voiceName.includes(normalizedHint)) {
+        score += 12 - index;
+      }
+    });
+
+    profile.langHints.forEach((hint, index) => {
+      const normalizedHint = hint.toLowerCase();
+      if (normalizedHint && voiceLang.includes(normalizedHint)) {
+        score += 8 - index;
+      }
+    });
+
+    if (voice.default) {
+      score += 1;
+    }
+
+    if (voiceLang.startsWith('en')) {
+      score += 1;
+    }
+
+    return score;
+  }
+
+  private refreshVoiceProfiles(): void {
+    if (!this.voices.length || !this.aiService.hasApiKey()) {
+      return;
+    }
+
+    this.characters.forEach(character => {
+      void this.ensureVoiceProfile(character.id);
+    });
+  }
+
+  private async ensureVoiceProfile(characterId: string): Promise<void> {
+    if (!this.aiService.hasApiKey() || !this.voices.length || this.pendingVoiceProfileIds.has(characterId)) {
+      return;
+    }
+
+    const character = this.characters.find(c => c.id === characterId);
+    if (!character) {
+      return;
+    }
+
+    const fingerprintHash = this.hashString(JSON.stringify({
+      name: character.name,
+      personality: character.personality,
+      tone: character.tone,
+      backstory: character.backstory,
+      systemPrompt: character.systemPrompt,
+      availableVoices: this.voices.map(v => `${v.name}|${v.lang}|${v.default}`)
+    }));
+
+    if (this.aiVoiceProfiles[characterId]?.updatedAt === fingerprintHash) {
+      return;
+    }
+
+    this.pendingVoiceProfileIds.add(characterId);
+    try {
+      const profile = await this.aiService.generateCharacterVoiceProfile(
+        character,
+        this.voices.map(voice => ({
+          name: voice.name,
+          lang: voice.lang,
+          default: voice.default
+        }))
+      );
+
+      if (profile) {
+        this.aiVoiceProfiles[characterId] = {
+          ...profile,
+          updatedAt: fingerprintHash
+        };
+        this.saveVoiceProfiles();
+      }
+    } finally {
+      this.pendingVoiceProfileIds.delete(characterId);
+    }
+  }
+
+  private hashString(input: string): number {
+    let hash = 0;
+    for (let i = 0; i < input.length; i++) {
+      hash = ((hash << 5) - hash) + input.charCodeAt(i);
+      hash |= 0;
+    }
+    return hash;
   }
 
   // Split long text into shorter chunks by sentence boundaries while respecting a max length
@@ -506,5 +686,29 @@ export class ChatComponent implements OnInit {
       console.warn('Could not load auto voice setting', e);
       this.autoVoiceEnabled = true;
     }
+  }
+
+  closePopup(): void {
+    this.showPopup = false;
+    this.popupMessage = '';
+    if (this.popupTimeoutId) {
+      clearTimeout(this.popupTimeoutId);
+      this.popupTimeoutId = null;
+    }
+  }
+
+  private openPopup(message: string, type: 'error' | 'success' | 'info' = 'info'): void {
+    this.popupMessage = message;
+    this.popupType = type;
+    this.showPopup = true;
+
+    if (this.popupTimeoutId) {
+      clearTimeout(this.popupTimeoutId);
+    }
+
+    this.popupTimeoutId = setTimeout(() => {
+      this.showPopup = false;
+      this.popupTimeoutId = null;
+    }, 3500);
   }
 }

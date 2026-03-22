@@ -1,13 +1,18 @@
 <div class="chat-container">
+  <div *ngIf="showPopup" class="app-popup" [ngClass]="'popup-' + popupType" role="status" aria-live="polite">
+    <span class="popup-text">{{ popupMessage }}</span>
+    <button type="button" class="popup-close" (click)="closePopup()" aria-label="Close popup">×</button>
+  </div>
+
   <!-- API Key Dialog -->
   <div *ngIf="showApiKeyDialog" class="modal-overlay">
     <div class="modal">
       <h3>Set Google Gemini API Key</h3>
       <p>Enter your Google Gemini API key to enable AI responses.</p>
       <p class="hint">Get a free key at <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com/app/apikey</a></p>
-      <input 
-        type="password" 
-        [(ngModel)]="tempApiKey" 
+      <input
+        type="password"
+        [(ngModel)]="tempApiKey"
         placeholder="Your API key"
         class="api-key-input"
       >
@@ -22,31 +27,47 @@
   <div class="chat-header">
     <h1>AI Chatbot</h1>
     <div class="header-controls">
-      <label class="voice-toggle">
+      <button
+        type="button"
+        class="btn-collapse"
+        (click)="toggleCharacterSection()"
+        [attr.aria-expanded]="!isCharacterSectionCollapsed"
+        [attr.aria-label]="isCharacterSectionCollapsed ? 'Show character section' : 'Hide character section'"
+        [title]="isCharacterSectionCollapsed ? 'Show characters' : 'Hide characters'"
+      >
+        <span class="chevron" [class.is-collapsed]="isCharacterSectionCollapsed" aria-hidden="true"></span>
+      </button>
+      <label
+        class="control-icon voice-toggle"
+        [class.is-active]="autoVoiceEnabled"
+        [title]="autoVoiceEnabled ? 'Auto voice on' : 'Auto voice off'"
+      >
         <input type="checkbox" [(ngModel)]="autoVoiceEnabled" (change)="saveAutoVoiceSetting()" />
-        Auto Voice
+        <svg class="voice-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 10v4h4l5 4V6L7 10H3z"></path>
+          <path d="M16 8a6 6 0 0 1 0 8"></path>
+          <path d="M18.5 5.5a9.5 9.5 0 0 1 0 13"></path>
+        </svg>
       </label>
-      <button class="btn-add" (click)="openAddCharacterDialog()">➕ Add Character</button>
-      <button *ngIf="!apiKeySet" (click)="openApiKeyDialog()" class="btn-settings">⚙️ Setup</button>
+      <button class="control-icon btn-add" (click)="openAddCharacterDialog()" title="Add character">+</button>
+      <button *ngIf="!apiKeySet" (click)="openApiKeyDialog()" class="control-icon btn-settings" title="Setup">S</button>
     </div>
   </div>
 
   <!-- Character Selection -->
-  <div class="character-selector">
-    <h3>Select Character:</h3>
-    <div class="characters-grid">
-      <div 
-        *ngFor="let char of characters"
-        (click)="selectCharacter(char.id)"
-        (keyup.enter)="selectCharacter(char.id)"
-        [class.active]="char.id === activeCharacterId"
-        class="character-btn"
-        tabindex="0"
-      >
-        <div class="char-name">{{ char.name }}</div>
-        <button class="char-delete" title="Delete character" (click)="$event.stopPropagation(); deleteCharacter(char.id)">🗑️</button>
-        <button class="btn-edit" (click)="openEditCharacterDialog(activeCharacterId)">✏️ Edit Character</button>
-        <div class="char-personality">{{ char.personality }}</div>
+  <div *ngIf="!isCharacterSectionCollapsed" class="character-selector">
+    <div class="character-selector-header">
+      <h3>Select Character:</h3>
+    </div>
+    <div class="char-selector-dropdown-container">
+      <select [value]="activeCharacterId" (change)="selectCharacter($event)" class="char-select">
+        <option *ngFor="let char of characters" [value]="char.id">
+          {{ char.name }}
+        </option>
+      </select>
+      <div class="char-selector-actions">
+        <button class="btn-edit" (click)="openEditCharacterDialog(activeCharacterId)">Edit</button>
+        <button class="char-delete" title="Delete character" (click)="deleteCharacter(activeCharacterId)">Delete</button>
       </div>
     </div>
   </div>
@@ -57,7 +78,6 @@
       <h3>{{ getCharacterName(activeCharacterId) }}</h3>
       <p>{{ getCharacterBackstory(activeCharacterId) }}</p>
       <div class="char-actions">
-        
       </div>
     </div>
   </div> -->
@@ -86,13 +106,13 @@
         <label>System Prompt</label>
         <textarea [(ngModel)]="tempCharacter.systemPrompt" rows="3"></textarea>
       </div>
-      <div class="form-row" *ngIf="voices && voices.length">
+      <!-- <div class="form-row" *ngIf="voices && voices.length">
         <label>Voice</label>
         <select [(ngModel)]="tempCharacter.voice">
           <option value="">(auto)</option>
           <option *ngFor="let v of voices" [value]="v.name">{{ v.name }} ({{ v.lang }})</option>
         </select>
-      </div>
+      </div> -->
       <div class="modal-buttons">
         <button (click)="saveCharacter()" class="btn-primary">{{ editingCharacter ? 'Save' : 'Add' }}</button>
         <button (click)="closeCharacterDialog()" class="btn-secondary">Cancel</button>
@@ -108,10 +128,16 @@
         <strong>{{ msg.sender === 'user' ? 'You' : getCharacterName(msg.characterId) }}:</strong>
         <p>{{ msg.text }}</p>
         <small class="timestamp">{{ msg.timestamp | date:'short' }}</small>
-        <!-- Show Speak button when not currently speaking this message -->
-        <button *ngIf="currentSpeakingMessageId !== msg.id && msg.sender === 'ai'" (click)="speakMessage(msg)" class="btn-speak" title="Read aloud">🔊</button>
-        <!-- Show Stop button when this message is currently being spoken -->
-        <button *ngIf="currentSpeakingMessageId === msg.id" (click)="stopSpeaking()" class="btn-stop" title="Stop speaking">⏹ Stop</button>
+        <button *ngIf="currentSpeakingMessageId !== msg.id && msg.sender === 'ai'" (click)="speakMessage(msg)" class="btn-speak" title="Read aloud" aria-label="Read aloud">
+          <svg class="message-audio-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 10v4h4l5 4V6L7 10H3z"></path>
+            <path d="M16 8a6 6 0 0 1 0 8"></path>
+            <path d="M18.5 5.5a9.5 9.5 0 0 1 0 13"></path>
+          </svg>
+        </button>
+        <button *ngIf="currentSpeakingMessageId === msg.id" (click)="stopSpeaking()" class="btn-stop" title="Stop speaking" aria-label="Stop speaking">
+          <span class="stop-square" aria-hidden="true"></span>
+        </button>
       </div>
     </div>
     <div *ngIf="isLoading" class="loading-indicator">
@@ -122,24 +148,29 @@
   <!-- Input Area -->
   <div class="input-area">
     <div class="input-group">
-      <input 
+      <input
         [(ngModel)]="userInput"
         (keyup.enter)="sendMessage()"
         placeholder="Type your message..."
         class="message-input"
         [disabled]="isLoading"
       >
-      <button 
-        (click)="sendMessage()"
-        [disabled]="isLoading || !userInput.trim()"
-        class="btn-send"
-      >
-        {{ isLoading ? 'Sending...' : 'Send' }}
-      </button>
-      <button (click)="clearChat()" class="btn-clear">Clear</button>
+      <div class="input-buttons">
+        <button
+          (click)="sendMessage()"
+          [disabled]="isLoading || !userInput.trim()"
+          class="btn-send"
+          title="Send"
+        >
+          <span>{{ isLoading ? '...' : 'Send' }}</span>
+        </button>
+        <button (click)="clearChat()" class="btn-clear" title="Clear Chat">
+          <span>Clear</span>
+        </button>
+      </div>
     </div>
     <div *ngIf="!apiKeySet" class="api-warning">
-      ⚠️ Please set your Google Gemini API key to enable AI responses
+      Please set your Google Gemini API key to enable AI responses
     </div>
   </div>
 </div>
