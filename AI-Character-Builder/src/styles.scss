@@ -11,3 +11,11 @@ body {
   color: #333;
   background: #f5f5f5;
 }
+
+/* Responsive styles */
+@media (max-width: 480px) {
+  body {
+    font-size: 12px;
+    padding: 10px;
+  }
+}

@@ -43,23 +43,24 @@
         class="character-btn"
         tabindex="0"
       >
-        <button class="char-delete" title="Delete character" (click)="$event.stopPropagation(); deleteCharacter(char.id)">🗑️</button>
         <div class="char-name">{{ char.name }}</div>
+        <button class="char-delete" title="Delete character" (click)="$event.stopPropagation(); deleteCharacter(char.id)">🗑️</button>
+        <button class="btn-edit" (click)="openEditCharacterDialog(activeCharacterId)">✏️ Edit Character</button>
         <div class="char-personality">{{ char.personality }}</div>
       </div>
     </div>
   </div>
 
   <!-- Current Character Info -->
-  <div *ngIf="activeCharacterId" class="character-info">
+  <!-- <div *ngIf="activeCharacterId" class="character-info">
     <div class="char-details">
       <h3>{{ getCharacterName(activeCharacterId) }}</h3>
       <p>{{ getCharacterBackstory(activeCharacterId) }}</p>
       <div class="char-actions">
-        <button class="btn-edit" (click)="openEditCharacterDialog(activeCharacterId)">✏️ Edit Character</button>
+        
       </div>
     </div>
-  </div>
+  </div> -->
 
   <!-- Character Add/Edit Dialog -->
   <div *ngIf="showCharacterDialog" class="modal-overlay">

@@ -8,3 +8,10 @@ body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   overflow: hidden;
 }
+
+/* Responsive styles */
+@media (max-width: 480px) {
+  body {
+    overflow: auto;
+  }
+}
