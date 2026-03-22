@@ -1,1 +1,69 @@
-<app-chat></app-chat>
+<div class="app-shell">
+  <app-chat *ngIf="isPinConfigured && !isLocked"></app-chat>
+
+  <div class="pin-lock" *ngIf="isLocked || !isPinConfigured">
+    <div class="pin-card">
+      <div class="pin-badge">PIN</div>
+      <h1>{{ isPinConfigured ? 'Unlock App' : 'Set App PIN' }}</h1>
+      <p>
+        {{ isPinConfigured
+          ? 'Enter your PIN to open the character builder.'
+          : 'Create a 4 to 6 digit PIN to lock the app on phones and desktop browsers.' }}
+      </p>
+
+      <div class="pin-form" *ngIf="!isPinConfigured; else unlockForm">
+        <label>
+          <span>New PIN</span>
+          <input
+            type="password"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            maxlength="6"
+            [(ngModel)]="pin"
+            placeholder="Enter 4 to 6 digits"
+          >
+        </label>
+
+        <label>
+          <span>Confirm PIN</span>
+          <input
+            type="password"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            maxlength="6"
+            [(ngModel)]="confirmPin"
+            placeholder="Repeat your PIN"
+            (keyup.enter)="setPin()"
+          >
+        </label>
+
+        <button type="button" class="pin-action" (click)="setPin()" [disabled]="isSubmitting">
+          {{ isSubmitting ? 'Saving...' : 'Save PIN' }}
+        </button>
+      </div>
+
+      <ng-template #unlockForm>
+        <div class="pin-form">
+          <label>
+            <span>PIN</span>
+            <input
+              type="password"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              maxlength="6"
+              [(ngModel)]="pinInput"
+              placeholder="Enter your PIN"
+              (keyup.enter)="unlockApp()"
+            >
+          </label>
+
+          <button type="button" class="pin-action" (click)="unlockApp()" [disabled]="isSubmitting">
+            {{ isSubmitting ? 'Checking...' : 'Unlock' }}
+          </button>
+        </div>
+      </ng-template>
+
+      <p *ngIf="pinError" class="pin-error">{{ pinError }}</p>
+    </div>
+  </div>
+</div>

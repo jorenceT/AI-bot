@@ -260,10 +260,19 @@ export class ChatComponent implements OnInit {
     }
   }
 
+  clearApiKey(): void {
+    this.aiService.clearApiKey();
+    this.apiKeySet = false;
+    this.tempApiKey = '';
+    this.showApiKeyDialog = false;
+    this.openPopup('API key cleared', 'info');
+  }
+
   async sendMessage(): Promise<void> {
     if (!this.userInput.trim()) return;
     if (!this.apiKeySet) {
       this.openPopup('Please set your Google Gemini API key first', 'error');
+      this.openApiKeyDialog();
       return;
     }
 

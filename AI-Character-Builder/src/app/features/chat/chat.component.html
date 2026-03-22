@@ -18,6 +18,7 @@
       >
       <div class="modal-buttons">
         <button (click)="saveApiKey()" class="btn-primary">Save</button>
+        <button *ngIf="tempApiKey || apiKeySet" (click)="clearApiKey()" class="btn-danger">Clear</button>
         <button (click)="closeApiKeyDialog()" class="btn-secondary">Cancel</button>
       </div>
     </div>

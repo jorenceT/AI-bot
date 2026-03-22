@@ -4,14 +4,133 @@
   box-sizing: border-box;
 }
 
+:host {
+  display: block;
+  min-height: 100vh;
+}
+
 body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   overflow: hidden;
 }
 
-/* Responsive styles */
+.app-shell {
+  min-height: 100vh;
+}
+
+.pin-lock {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.18), transparent 34%),
+    linear-gradient(145deg, #5563d7 0%, #6f50a3 45%, #2e325f 100%);
+}
+
+.pin-card {
+  width: min(100%, 26rem);
+  padding: 1.5rem;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #1e2147;
+  box-shadow: 0 24px 60px rgba(20, 24, 56, 0.28);
+}
+
+.pin-badge {
+  width: fit-content;
+  margin-bottom: 1rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(85, 99, 215, 0.12);
+  color: #4a58c8;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.pin-card h1 {
+  font-size: clamp(1.7rem, 4vw, 2.2rem);
+  line-height: 1.1;
+}
+
+.pin-card p {
+  margin-top: 0.75rem;
+  color: #555a7a;
+  line-height: 1.5;
+}
+
+.pin-form {
+  display: grid;
+  gap: 0.95rem;
+  margin-top: 1.4rem;
+}
+
+.pin-form label {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.pin-form span {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #2d3158;
+}
+
+.pin-form input {
+  width: 100%;
+  padding: 0.95rem 1rem;
+  border: 1px solid rgba(89, 95, 146, 0.22);
+  border-radius: 14px;
+  font-size: 1rem;
+  color: #1f2348;
+  background: #fff;
+}
+
+.pin-form input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.14);
+}
+
+.pin-action {
+  margin-top: 0.35rem;
+  border: none;
+  border-radius: 14px;
+  padding: 0.95rem 1rem;
+  background: linear-gradient(135deg, #5563d7 0%, #6c55c5 100%);
+  color: white;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pin-action:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.pin-error {
+  margin-top: 1rem;
+  color: #b53646;
+  font-weight: 600;
+}
+
 @media (max-width: 480px) {
   body {
     overflow: auto;
+  }
+
+  .pin-lock {
+    padding: 1rem;
+    align-items: stretch;
+  }
+
+  .pin-card {
+    width: 100%;
+    padding: 1.2rem;
+    border-radius: 20px;
+    align-self: center;
   }
 }

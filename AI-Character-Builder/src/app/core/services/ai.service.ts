@@ -51,6 +51,11 @@ export class AIService {
     localStorage.setItem('geminiApiKey', key);
   }
 
+  clearApiKey(): void {
+    this.apiKey = '';
+    localStorage.removeItem('geminiApiKey');
+  }
+
   hasApiKey(): boolean {
     return !!this.apiKey;
   }
