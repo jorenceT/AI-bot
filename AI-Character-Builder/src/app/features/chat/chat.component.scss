@@ -1,10 +1,12 @@
 .chat-container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  min-height: 100vh;
+  min-height: 100dvh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   position: relative;
+  overflow: hidden;
 }
 
 .app-popup {
@@ -233,10 +235,13 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.75rem;
 
   h1 {
     margin: 0;
-    font-size: 1.8rem;
+    font-size: clamp(1.15rem, 2.6vw, 1.8rem);
+    line-height: 1.1;
+    min-width: 0;
   }
 }
 
@@ -260,7 +265,8 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
 }
 
 .character-selector-header {
@@ -400,6 +406,7 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  min-height: 0;
 }
 
 .message {
@@ -463,22 +470,27 @@
 }
 
 .input-area {
+  position: sticky;
+  bottom: 0;
   background: rgba(0, 0, 0, 0.1);
   padding: 1.5rem;
   border-top: 2px solid rgba(0, 0, 0, 0.1);
+  padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  backdrop-filter: blur(12px);
 }
 
 .input-group {
-  position: relative;
   display: flex;
   align-items: center;
+  gap: 0.75rem;
 }
 
 .message-input {
   flex: 1;
-  padding: 0.75rem 6rem 0.75rem 1rem; /* Make space on the right for buttons */
+  min-width: 0;
+  padding: 0.95rem 1rem;
   border: none;
-  border-radius: 8px;
+  border-radius: 14px;
   font-size: 1rem;
   font-family: inherit;
   transition: all 0.3s ease;
@@ -495,30 +507,31 @@
 }
 
 .input-buttons {
-  position: absolute;
-  right: 0.5rem;
   display: flex;
   gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 .btn-send,
 .btn-clear {
-  padding: 0.5rem;
+  min-height: 3rem;
+  padding: 0.75rem 1rem;
   border: none;
-  border-radius: 6px;
+  border-radius: 12px;
   cursor: pointer;
-  font-size: 1.2rem;
+  font-size: 0.95rem;
+  font-weight: 600;
   line-height: 1;
   transition: all 0.3s ease;
-  background: transparent;
-  color: #333;
+  white-space: nowrap;
 }
 
 .btn-send {
-  color: #4CAF50;
+  background: #4CAF50;
+  color: white;
   
   &:hover:not(:disabled) {
-    transform: scale(1.1);
+    transform: translateY(-1px);
   }
 
   &:disabled {
@@ -528,10 +541,11 @@
 }
 
 .btn-clear {
-  color: #999;
+  background: rgba(255, 255, 255, 0.18);
+  color: white;
   
   &:hover {
-    color: #333;
+    background: rgba(255, 255, 255, 0.26);
   }
 }
 
@@ -653,6 +667,21 @@
 }
 
 @media (max-width: 768px) {
+  .chat-header {
+    padding: 1rem;
+  }
+
+  .header-controls {
+    gap: 0.45rem;
+  }
+
+  .control-icon,
+  .btn-add,
+  .btn-settings {
+    width: 1.85rem;
+    height: 1.85rem;
+  }
+
   .app-popup {
     left: 1rem;
     right: 1rem;
@@ -680,17 +709,61 @@
   .modal {
     width: 95%;
   }
+
+  .input-area {
+    padding: 1rem;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .input-group {
+    align-items: stretch;
+  }
 }
 
 /* Responsive styles */
 @media (max-width: 480px) {
   .chat-container {
-    height: auto;
-    padding: 10px;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  .chat-header {
+    padding: 0.9rem 1rem;
+  }
+
+  .chat-header h1 {
+    font-size: 1rem;
   }
 
   .modal {
     padding: 1rem;
     font-size: 0.9rem;
+  }
+
+  .chat-header,
+  .character-selector,
+  .messages-container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .input-group {
+    flex-wrap: wrap;
+  }
+
+  .message-input {
+    width: 100%;
+  }
+
+  .input-buttons {
+    width: 100%;
+  }
+
+  .btn-send,
+  .btn-clear {
+    flex: 1;
+    justify-content: center;
+    display: inline-flex;
+    align-items: center;
   }
 }
