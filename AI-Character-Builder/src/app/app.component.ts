@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Capacitor } from '@capacitor/core';
 import { ChatComponent } from './features/chat/chat.component';
 
 @Component({
@@ -15,16 +16,23 @@ export class AppComponent implements OnInit {
   pin = '';
   confirmPin = '';
   pinInput = '';
+  userName = '';
   isLocked = true;
   isPinConfigured = false;
+  showNameStep = false;
   pinError = '';
   isSubmitting = false;
 
   private readonly pinStorageKey = 'appPinLockHash';
+  private readonly userNameStorageKey = 'appUserName';
+  private readonly micPermissionRequestedStorageKey = 'micPermissionRequested';
 
   ngOnInit(): void {
     this.isPinConfigured = !!localStorage.getItem(this.pinStorageKey);
     this.isLocked = this.isPinConfigured;
+    this.userName = localStorage.getItem(this.userNameStorageKey) || '';
+    this.showNameStep = !this.isLocked && !this.userName.trim();
+    void this.requestMicrophonePermissionOnFirstLoad();
   }
 
   async setPin(): Promise<void> {
@@ -54,7 +62,7 @@ export class AppComponent implements OnInit {
       this.pin = '';
       this.confirmPin = '';
       this.isPinConfigured = true;
-      this.isLocked = false;
+      this.finishUnlock();
     } finally {
       this.isSubmitting = false;
     }
@@ -84,7 +92,7 @@ export class AppComponent implements OnInit {
       const hash = await this.hashPin(this.pinInput.trim());
       if (hash === savedHash) {
         this.pinInput = '';
-        this.isLocked = false;
+        this.finishUnlock();
         return;
       }
 
@@ -94,6 +102,25 @@ export class AppComponent implements OnInit {
     }
   }
 
+  saveUserName(): void {
+    const normalizedName = this.userName.trim();
+    if (!normalizedName) {
+      this.pinError = 'Enter your name to continue.';
+      return;
+    }
+
+    localStorage.setItem(this.userNameStorageKey, normalizedName);
+    this.userName = normalizedName;
+    this.showNameStep = false;
+    this.pinError = '';
+  }
+
+  private finishUnlock(): void {
+    this.isLocked = false;
+    this.pinError = '';
+    this.showNameStep = !this.userName.trim();
+  }
+
   private async hashPin(pinValue: string): Promise<string> {
     const encoder = new TextEncoder();
     const bytes = encoder.encode(pinValue);
@@ -101,5 +128,49 @@ export class AppComponent implements OnInit {
     return Array.from(new Uint8Array(digest))
       .map(byte => byte.toString(16).padStart(2, '0'))
       .join('');
+  }
+
+  private async requestMicrophonePermissionOnFirstLoad(): Promise<void> {
+    if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') {
+      return;
+    }
+
+    if (localStorage.getItem(this.micPermissionRequestedStorageKey) === 'true') {
+      return;
+    }
+
+    const permissionState = await this.getMicrophonePermissionState();
+    if (permissionState === 'granted' || permissionState === 'denied') {
+      localStorage.setItem(this.micPermissionRequestedStorageKey, 'true');
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop());
+    } catch (error) {
+      console.warn('Microphone permission request was not granted on first load.', error);
+    } finally {
+      localStorage.setItem(this.micPermissionRequestedStorageKey, 'true');
+    }
+  }
+
+  private async getMicrophonePermissionState(): Promise<PermissionState | 'unknown'> {
+    if (!navigator.permissions?.query) {
+      return 'unknown';
+    }
+
+    try {
+      const status = await navigator.permissions.query({
+        name: 'microphone' as PermissionName
+      });
+      return status.state;
+    } catch (error) {
+      return 'unknown';
+    }
   }
 }

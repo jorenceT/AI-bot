@@ -17,9 +17,11 @@
         class="api-key-input"
       >
       <div class="modal-buttons">
-        <button (click)="saveApiKey()" class="btn-primary">Save</button>
-        <button *ngIf="tempApiKey || apiKeySet" (click)="clearApiKey()" class="btn-danger">Clear</button>
-        <button (click)="closeApiKeyDialog()" class="btn-secondary">Cancel</button>
+        <button type="button" (click)="saveApiKey()" class="btn-primary" [disabled]="isSavingApiKey || !tempApiKey.trim()">
+          {{ isSavingApiKey ? 'Saving...' : 'Save' }}
+        </button>
+        <button type="button" *ngIf="tempApiKey || apiKeySet" (click)="clearApiKey()" class="btn-danger" [disabled]="isSavingApiKey">Clear</button>
+        <button type="button" (click)="closeApiKeyDialog()" class="btn-secondary" [disabled]="isSavingApiKey">Cancel</button>
       </div>
     </div>
   </div>
@@ -41,16 +43,20 @@
       <label
         class="control-icon voice-toggle"
         [class.is-active]="autoVoiceEnabled"
+        [class.is-muted]="!autoVoiceEnabled"
         [title]="autoVoiceEnabled ? 'Auto voice on' : 'Auto voice off'"
       >
         <input type="checkbox" [(ngModel)]="autoVoiceEnabled" (change)="saveAutoVoiceSetting()" />
         <svg class="voice-icon" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M3 10v4h4l5 4V6L7 10H3z"></path>
-          <path d="M16 8a6 6 0 0 1 0 8"></path>
-          <path d="M18.5 5.5a9.5 9.5 0 0 1 0 13"></path>
+          <path class="voice-body" d="M3 10v4h4l5 4V6L7 10H3z"></path>
+          <path class="voice-wave voice-wave-one" d="M16 8a6 6 0 0 1 0 8"></path>
+          <path class="voice-wave voice-wave-two" d="M18.5 5.5a9.5 9.5 0 0 1 0 13"></path>
+          <path class="voice-slash" d="M5 5L19 19"></path>
         </svg>
       </label>
-      <button class="control-icon btn-add" (click)="openAddCharacterDialog()" title="Add character">+</button>
+      <button class="btn-add btn-add-plain" (click)="openAddCharacterDialog()" title="Add character" aria-label="Add character">
+        <img src="assets/addchar.png" alt="" class="btn-add-icon">
+      </button>
       <button (click)="openApiKeyDialog()" class="control-icon btn-settings" title="Setup" aria-label="Setup">
         <svg class="settings-icon" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M19.14 12.94a7.43 7.43 0 0 0 .05-.94 7.43 7.43 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.12 7.12 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.49-.42h-3.84a.5.5 0 0 0-.49.42l-.36 2.54a7.12 7.12 0 0 0-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.43 7.43 0 0 0-.05.94 7.43 7.43 0 0 0 .05.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.38 1.04.69 1.63.94l.36 2.54a.5.5 0 0 0 .49.42h3.84a.5.5 0 0 0 .49-.42l.36-2.54c.59-.25 1.13-.56 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58z"></path>
@@ -105,12 +111,24 @@
         <input [(ngModel)]="tempCharacter.tone" placeholder="e.g. gentle, reflective" />
       </div>
       <div class="form-row">
-        <label>Backstory</label>
-        <textarea [(ngModel)]="tempCharacter.backstory" rows="3"></textarea>
+        <label>
+          Backstory
+        </label>
+        <textarea
+          [(ngModel)]="tempCharacter.backstory"
+          rows="3"
+          placeholder="Optional. Add a short history, background, or life story for this character."
+        ></textarea>
       </div>
       <div class="form-row">
-        <label>System Prompt</label>
-        <textarea [(ngModel)]="tempCharacter.systemPrompt" rows="3"></textarea>
+        <label>
+          System Prompt
+        </label>
+        <textarea
+          [(ngModel)]="tempCharacter.systemPrompt"
+          rows="3"
+          placeholder="Optional. Example: Be descriptive, calm, and clear. Keep replies short and not overly formal."
+        ></textarea>
       </div>
       <!-- <div class="form-row" *ngIf="voices && voices.length">
         <label>Voice</label>
@@ -162,6 +180,31 @@
         [disabled]="isLoading"
       >
       <div class="input-buttons">
+        <button
+          *ngIf="speechRecognitionSupported"
+          type="button"
+          class="btn-mic"
+          [class.is-listening]="isListening"
+          [title]="isListening ? 'Listening...' : 'Hold to talk'"
+          aria-label="Hold to talk"
+          (pointerdown)="startVoiceCapture($event)"
+          (pointerup)="stopVoiceCapture(false, $event)"
+          (pointerleave)="stopVoiceCapture(false, $event)"
+          (pointercancel)="stopVoiceCapture(false, $event)"
+        >
+          <span class="mic-visual" aria-hidden="true">
+            <span class="mic-dot"></span>
+            <span class="mic-wave"></span>
+            <span class="mic-wave"></span>
+            <span class="mic-wave"></span>
+          </span>
+          <svg class="mic-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"></path>
+            <path d="M19 10a7 7 0 0 1-14 0"></path>
+            <path d="M12 17v4"></path>
+            <path d="M8 21h8"></path>
+          </svg>
+        </button>
         <button
           (click)="sendMessage()"
           [disabled]="isLoading || !userInput.trim()"

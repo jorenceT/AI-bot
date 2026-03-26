@@ -1,5 +1,5 @@
 <div class="app-shell">
-  <app-chat *ngIf="isPinConfigured && !isLocked"></app-chat>
+  <app-chat *ngIf="isPinConfigured && !isLocked && !showNameStep" [userName]="userName"></app-chat>
 
   <div class="pin-lock" *ngIf="isLocked || !isPinConfigured">
     <div class="pin-card">
@@ -62,6 +62,33 @@
           </button>
         </div>
       </ng-template>
+
+      <p *ngIf="pinError" class="pin-error">{{ pinError }}</p>
+    </div>
+  </div>
+
+  <div class="pin-lock" *ngIf="isPinConfigured && !isLocked && showNameStep">
+    <div class="pin-card">
+      <div class="pin-badge">PROFILE</div>
+      <h1>What should we call you?</h1>
+      <p>Enter your name once so the chatbot can greet you personally.</p>
+
+      <div class="pin-form">
+        <label>
+          <span>Your Name</span>
+          <input
+            type="text"
+            maxlength="40"
+            [(ngModel)]="userName"
+            placeholder="Enter your name"
+            (keyup.enter)="saveUserName()"
+          >
+        </label>
+
+        <button type="button" class="pin-action" (click)="saveUserName()">
+          Continue
+        </button>
+      </div>
 
       <p *ngIf="pinError" class="pin-error">{{ pinError }}</p>
     </div>

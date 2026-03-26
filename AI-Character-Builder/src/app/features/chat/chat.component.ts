@@ -1,6 +1,7 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, Input, OnDestroy, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Observable } from 'rxjs';
 import { Message, Character } from '../../core/models/ai.models';
 import { ChatService } from '../../core/services/chat.service';
@@ -11,6 +12,29 @@ interface RuntimeVoiceProfile extends CharacterVoiceProfile {
   updatedAt: number;
 }
 
+interface AndroidTtsStatus {
+  available: boolean;
+  hasEngine: boolean;
+  initialized: boolean;
+  currentEngine: string | null;
+  musicVolume: number;
+  maxMusicVolume: number;
+  isVolumeAudible: boolean;
+  languageAvailable: boolean;
+  languageStatus: number;
+  hasVoices: boolean;
+}
+
+const AndroidTts = registerPlugin<{
+  getStatus(): Promise<AndroidTtsStatus>;
+  speak(options: { text: string; rate: number; pitch: number; volume: number }): Promise<{ started: boolean; utteranceId: string }>;
+  stop(): Promise<void>;
+  addListener(
+    eventName: 'ttsStart' | 'ttsDone' | 'ttsError',
+    listenerFunc: (data: { utteranceId?: string; errorCode?: number }) => void
+  ): Promise<{ remove: () => Promise<void> }>;
+}>('AndroidTts');
+
 @Component({
   selector: 'app-chat',
   standalone: true,
@@ -19,6 +43,8 @@ interface RuntimeVoiceProfile extends CharacterVoiceProfile {
   styleUrls: ['./chat.component.scss']
 })
 export class ChatComponent implements OnInit {
+  @Input() userName = '';
+
   messages$: Observable<Message[]>;
   characters$: Observable<Character[]>;
   activeCharacterId$: Observable<string>;
@@ -31,6 +57,7 @@ export class ChatComponent implements OnInit {
   apiKeySet = false;
   showApiKeyDialog = false;
   tempApiKey = '';
+  isSavingApiKey = false;
   popupMessage = '';
   popupType: 'error' | 'success' | 'info' = 'info';
   showPopup = false;
@@ -64,12 +91,24 @@ export class ChatComponent implements OnInit {
   // Persisted per-character explicit voice selection (voice.name). If set, this overrides heuristics.
   // value may be a string or null/empty when no explicit selection is set
   characterVoiceSelection: Record<string, string | null> = {};
+  speechRecognitionSupported = false;
+  isListening = false;
+  liveTranscript = '';
+  private speechRecognition: any = null;
+  private speechResult = '';
+  private hasShownLoginGreeting = false;
+  private activeMicPointerId: number | null = null;
+  private shouldSendVoiceMessage = false;
+  private isFinalizingVoiceCapture = false;
+  private speechStartTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private nativeTtsListenersReady = false;
 
   constructor(
     private chatService: ChatService,
     private characterService: CharacterService,
     private aiService: AIService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private ngZone: NgZone
   ) {
     this.messages$ = this.chatService.getMessages();
     this.characters$ = this.characterService.getCharacters();
@@ -91,6 +130,7 @@ export class ChatComponent implements OnInit {
     this.activeCharacterId$.subscribe(id => {
       this.activeCharacterId = id;
       this.chatService.switchCharacter(id);
+      this.ensureWelcomeMessage(id);
       this.cdr.detectChanges();
     });
 
@@ -99,6 +139,18 @@ export class ChatComponent implements OnInit {
     this.loadVoices();
     this.loadVoiceSelections();
     this.loadVoiceProfiles();
+    this.setupSpeechRecognition();
+
+    if (!this.apiKeySet) {
+      setTimeout(() => {
+        this.showApiKeyDialog = true;
+        this.cdr.detectChanges();
+      }, 100);
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.stopVoiceCapture(true);
   }
 
   // Load persisted per-character voice selections from localStorage
@@ -237,11 +289,19 @@ export class ChatComponent implements OnInit {
   }
 
   openApiKeyDialog(): void {
+    if (this.isSavingApiKey) {
+      return;
+    }
+
     this.showApiKeyDialog = true;
     this.tempApiKey = localStorage.getItem('geminiApiKey') || '';
   }
 
   closeApiKeyDialog(): void {
+    if (this.isSavingApiKey) {
+      return;
+    }
+
     this.showApiKeyDialog = false;
     this.tempApiKey = '';
   }
@@ -251,12 +311,27 @@ export class ChatComponent implements OnInit {
   }
 
   saveApiKey(): void {
-    if (this.tempApiKey.trim()) {
-      this.aiService.setApiKey(this.tempApiKey);
+    const normalizedApiKey = this.tempApiKey.trim();
+    if (!normalizedApiKey || this.isSavingApiKey) {
+      return;
+    }
+
+    this.isSavingApiKey = true;
+
+    try {
+      this.aiService.setApiKey(normalizedApiKey);
       this.apiKeySet = true;
+      this.closePopup();
       this.showApiKeyDialog = false;
       this.tempApiKey = '';
-      this.refreshVoiceProfiles();
+      this.cdr.detectChanges();
+
+      // Run voice-profile generation after the modal closes and only for the active character.
+      setTimeout(() => {
+        void this.ensureVoiceProfile(this.activeCharacterId);
+      }, 0);
+    } finally {
+      this.isSavingApiKey = false;
     }
   }
 
@@ -279,17 +354,20 @@ export class ChatComponent implements OnInit {
     const text = this.userInput;
     this.userInput = '';
     this.isLoading = true;
+    this.cdr.detectChanges();
 
     try {
-      // Add user message
-      const userMessage: Message = {
-        id: 'msg_' + Date.now(),
-        text: text,
-        sender: 'user',
-        timestamp: new Date(),
-        characterId: this.activeCharacterId
-      };
-      this.chatService.addMessage(userMessage);
+      this.ngZone.run(() => {
+        const userMessage: Message = {
+          id: 'msg_' + Date.now(),
+          text: text,
+          sender: 'user',
+          timestamp: new Date(),
+          characterId: this.activeCharacterId
+        };
+        this.chatService.addMessage(userMessage);
+        this.cdr.detectChanges();
+      });
 
       // Get active character
       const activeChar = this.characters.find(c => c.id === this.activeCharacterId);
@@ -297,27 +375,34 @@ export class ChatComponent implements OnInit {
 
       // Get AI response
       const aiResponse = await this.aiService.sendMessage(text, this.activeCharacterId, activeChar);
-      
-      // Add AI message
-      const aiMessage: Message = {
-        id: 'msg_' + Date.now() + '_ai',
-        text: aiResponse,
-        sender: 'ai',
-        timestamp: new Date(),
-        characterId: this.activeCharacterId
-      };
-      this.chatService.addMessage(aiMessage);
-      // Automatically speak the AI response if enabled
-      if (this.autoVoiceEnabled) {
-        // give a slight delay to ensure UI updates and selection of voice
-        setTimeout(() => this.speakMessage(aiMessage), 50);
-      }
+
+      this.ngZone.run(() => {
+        const aiMessage: Message = {
+          id: 'msg_' + Date.now() + '_ai',
+          text: aiResponse,
+          sender: 'ai',
+          timestamp: new Date(),
+          characterId: this.activeCharacterId
+        };
+        this.chatService.addMessage(aiMessage);
+        this.cdr.detectChanges();
+
+        if (this.autoVoiceEnabled) {
+          setTimeout(() => void this.speakMessage(aiMessage), 50);
+        }
+      });
 
     } catch (error: any) {
-      this.openPopup(error?.message || 'Something went wrong', 'error');
+      this.ngZone.run(() => {
+        this.openPopup(error?.message || 'Something went wrong', 'error');
+        this.cdr.detectChanges();
+      });
       console.error('Error:', error);
     } finally {
-      this.isLoading = false;
+      this.ngZone.run(() => {
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      });
     }
   }
 
@@ -326,6 +411,7 @@ export class ChatComponent implements OnInit {
     if (target) {
       const characterId = target.value;
       this.characterService.setActiveCharacter(characterId);
+      this.ensureWelcomeMessage(characterId);
     }
   }
 
@@ -350,21 +436,113 @@ export class ChatComponent implements OnInit {
     return this.characters.find(c => c.id === characterId)?.backstory || '';
   }
 
+  startVoiceCapture(event?: PointerEvent): void {
+    event?.preventDefault();
+
+    if (!this.speechRecognitionSupported || this.isListening) {
+      if (!this.speechRecognitionSupported) {
+        this.openPopup('Speech input is not supported on this device/browser.', 'error');
+      }
+      return;
+    }
+
+    this.speechResult = '';
+    this.liveTranscript = '';
+    this.isListening = true;
+    this.isFinalizingVoiceCapture = false;
+    this.shouldSendVoiceMessage = true;
+    this.activeMicPointerId = event?.pointerId ?? null;
+
+    const target = event?.currentTarget as HTMLElement | null;
+    if (target && this.activeMicPointerId !== null && target.setPointerCapture) {
+      try {
+        target.setPointerCapture(this.activeMicPointerId);
+      } catch (error) {
+        // ignore capture failures
+      }
+    }
+
+    try {
+      this.speechRecognition?.start();
+    } catch (error) {
+      this.isListening = false;
+      this.activeMicPointerId = null;
+      this.openPopup('Microphone could not start. Please allow microphone access.', 'error');
+    }
+  }
+
+  stopVoiceCapture(skipApply = false, event?: PointerEvent): void {
+    if (!this.isListening && !this.speechRecognition) {
+      return;
+    }
+
+    const target = event?.currentTarget as HTMLElement | null;
+    const pointerId = event?.pointerId ?? this.activeMicPointerId;
+    if (target && pointerId !== null && target.hasPointerCapture?.(pointerId)) {
+      try {
+        target.releasePointerCapture(pointerId);
+      } catch (error) {
+        // ignore release failures
+      }
+    }
+
+    this.activeMicPointerId = null;
+    this.isListening = false;
+    this.shouldSendVoiceMessage = !skipApply;
+
+    try {
+      this.speechRecognition?.stop();
+    } catch (error) {
+      // ignore duplicate stops
+      if (!skipApply) {
+        void this.finalizeVoiceCapture();
+      }
+    }
+  }
+
   async speakMessage(msg: Message): Promise<void> {
+    if (!this.autoVoiceEnabled) {
+      return;
+    }
+
+    const ttsIssue = await this.getAndroidTtsIssue();
+    if (ttsIssue) {
+      this.openPopup(ttsIssue, 'error');
+      return;
+    }
+
+    if (!this.canUseSpeechSynthesis() && !this.isNativeAndroid()) {
+      this.openPopup('Text-to-speech is not available on this device.', 'error');
+      return;
+    }
+
     await this.ensureVoiceProfile(msg.characterId);
 
-    // Cancel any ongoing speech and set current speaking id
+    if (this.isNativeAndroid()) {
+      await this.speakMessageWithNativeTts(msg);
+      return;
+    }
+
+    await this.waitForVoices();
+
+    const synth = window.speechSynthesis;
+
+    this.clearSpeechStartTimeout();
+
+    // Cancel any ongoing speech before starting a new message
     try {
-      window.speechSynthesis.cancel();
+      synth.cancel();
+      synth.resume();
     } catch (e) {
       // ignore
     }
 
-    // mark this message as currently speaking
-    this.currentSpeakingMessageId = msg.id;
-
     // Split text into sentence-like chunks for more natural pacing
     const chunks = this.splitTextIntoChunks(msg.text, 180);
+    if (!chunks.length) {
+      this.openPopup('There is no message text to read aloud.', 'info');
+      return;
+    }
 
     const character = this.characters.find(c => c.id === msg.characterId);
 
@@ -373,13 +551,15 @@ export class ChatComponent implements OnInit {
     const baseRate = speechSettings.rate;
     const baseVolume = speechSettings.volume;
 
-    const synth = window.speechSynthesis;
     let isCancelled = false;
+    let didStartSpeaking = false;
 
     const speakChunk = (index: number) => {
       if (isCancelled || index >= chunks.length) {
         // finished
         this.currentSpeakingMessageId = null;
+        this.clearSpeechStartTimeout();
+        this.cdr.detectChanges();
         return;
       }
 
@@ -398,7 +578,16 @@ export class ChatComponent implements OnInit {
       if (v) {
         u.voice = v;
         if (v.lang) u.lang = v.lang;
+      } else {
+        u.lang = 'en-US';
       }
+
+      u.onstart = () => {
+        didStartSpeaking = true;
+        this.currentSpeakingMessageId = msg.id;
+        this.clearSpeechStartTimeout();
+        this.cdr.detectChanges();
+      };
 
       u.onend = () => {
         // small natural pause before next chunk; vary by character for personality
@@ -411,9 +600,31 @@ export class ChatComponent implements OnInit {
         // on error, stop and clear state
         isCancelled = true;
         this.currentSpeakingMessageId = null;
+        this.clearSpeechStartTimeout();
+        this.openPopup('Speech playback failed on this device. Check media volume and Android text-to-speech settings.', 'error');
+        this.cdr.detectChanges();
       };
 
+      this.speechStartTimeoutId = setTimeout(() => {
+        if (!didStartSpeaking) {
+          isCancelled = true;
+          this.currentSpeakingMessageId = null;
+          try {
+            synth.cancel();
+          } catch (error) {
+            // ignore
+          }
+          this.openPopup('Speech did not start. Check media volume and Android text-to-speech settings.', 'error');
+          this.cdr.detectChanges();
+        }
+      }, 1500);
+
       synth.speak(u);
+      try {
+        synth.resume();
+      } catch (error) {
+        // ignore
+      }
     };
 
     // start speaking first chunk
@@ -574,9 +785,12 @@ export class ChatComponent implements OnInit {
       return;
     }
 
-    this.characters.forEach(character => {
-      void this.ensureVoiceProfile(character.id);
-    });
+    const targetCharacterId = this.activeCharacterId || this.characters[0]?.id;
+    if (!targetCharacterId) {
+      return;
+    }
+
+    void this.ensureVoiceProfile(targetCharacterId);
   }
 
   private async ensureVoiceProfile(characterId: string): Promise<void> {
@@ -666,12 +880,143 @@ export class ChatComponent implements OnInit {
   }
 
   stopSpeaking(): void {
-    try {
-      window.speechSynthesis.cancel();
-    } catch (e) {
-      // ignore
+    if (this.isNativeAndroid()) {
+      void AndroidTts.stop().catch(() => undefined);
+    } else {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (e) {
+        // ignore
+      }
     }
+    this.clearSpeechStartTimeout();
     this.currentSpeakingMessageId = null;
+  }
+
+  private async speakMessageWithNativeTts(msg: Message): Promise<void> {
+    await this.ensureNativeTtsListeners();
+
+    const character = this.characters.find(c => c.id === msg.characterId);
+    const speechSettings = this.getSpeechSettings(msg.characterId, character);
+    const text = this.splitTextIntoChunks(msg.text, 600).join(' ');
+    if (!text.trim()) {
+      this.openPopup('There is no message text to read aloud.', 'info');
+      return;
+    }
+
+    this.currentSpeakingMessageId = msg.id;
+    this.cdr.detectChanges();
+
+    try {
+      await AndroidTts.speak({
+        text,
+        rate: speechSettings.rate,
+        pitch: speechSettings.pitch,
+        volume: speechSettings.volume
+      });
+    } catch (error) {
+      this.currentSpeakingMessageId = null;
+      this.openPopup('Android text-to-speech could not start.', 'error');
+      this.cdr.detectChanges();
+    }
+  }
+
+  private async waitForVoices(): Promise<void> {
+    if (this.voices.length) {
+      return;
+    }
+
+    await new Promise<void>(resolve => {
+      const timeoutId = setTimeout(() => resolve(), 350);
+      try {
+        window.speechSynthesis.getVoices();
+      } catch (error) {
+        clearTimeout(timeoutId);
+        resolve();
+        return;
+      }
+
+      window.setTimeout(() => {
+        this.voices = window.speechSynthesis.getVoices() || [];
+        this.selectPreferredVoice();
+        resolve();
+      }, 100);
+    });
+  }
+
+  private clearSpeechStartTimeout(): void {
+    if (this.speechStartTimeoutId) {
+      clearTimeout(this.speechStartTimeoutId);
+      this.speechStartTimeoutId = null;
+    }
+  }
+
+  private async getAndroidTtsIssue(): Promise<string | null> {
+    if (!this.isNativeAndroid()) {
+      return null;
+    }
+
+    try {
+      const status = await AndroidTts.getStatus();
+
+      if (!status.hasEngine || !status.initialized || !status.available) {
+        return 'Android text-to-speech is not ready on this phone. Enable a TTS engine like Google Speech Services in system settings.';
+      }
+
+      if (!status.isVolumeAudible) {
+        return 'Media volume is muted. Turn up your phone media volume to hear spoken replies.';
+      }
+
+      if (!status.languageAvailable) {
+        return 'English text-to-speech is not installed on this phone. Install or enable English voice data in Android text-to-speech settings.';
+      }
+
+      if (!status.hasVoices) {
+        return 'No Android text-to-speech voices are available. Install voice data in Android text-to-speech settings.';
+      }
+    } catch (error) {
+      console.warn('Could not verify Android TTS status', error);
+      return 'Could not verify Android text-to-speech status. Check Android media volume and text-to-speech settings.';
+    }
+
+    return null;
+  }
+
+  private isNativeAndroid(): boolean {
+    return Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
+  }
+
+  private canUseSpeechSynthesis(): boolean {
+    return typeof window !== 'undefined' && 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined';
+  }
+
+  private async ensureNativeTtsListeners(): Promise<void> {
+    if (this.nativeTtsListenersReady || !this.isNativeAndroid()) {
+      return;
+    }
+
+    await AndroidTts.addListener('ttsDone', () => {
+      this.ngZone.run(() => {
+        this.currentSpeakingMessageId = null;
+        this.cdr.detectChanges();
+      });
+    });
+
+    await AndroidTts.addListener('ttsError', () => {
+      this.ngZone.run(() => {
+        this.currentSpeakingMessageId = null;
+        this.openPopup('Android text-to-speech failed while speaking.', 'error');
+        this.cdr.detectChanges();
+      });
+    });
+
+    await AndroidTts.addListener('ttsStart', () => {
+      this.ngZone.run(() => {
+        this.cdr.detectChanges();
+      });
+    });
+
+    this.nativeTtsListenersReady = true;
   }
 
   // Persist / load auto-voice setting
@@ -719,5 +1064,115 @@ export class ChatComponent implements OnInit {
       this.showPopup = false;
       this.popupTimeoutId = null;
     }, 3500);
+  }
+
+  private ensureWelcomeMessage(characterId: string): void {
+    if (!characterId || this.hasShownLoginGreeting) {
+      return;
+    }
+
+    const greetingText = this.userName.trim()
+      ? `Hi ${this.userName.trim()}, how can I help you?`
+      : 'How can I help you?';
+
+    const welcomeMessage: Message = {
+      id: `welcome_${characterId}_${Date.now()}`,
+      text: greetingText,
+      sender: 'ai',
+      timestamp: new Date(),
+      characterId
+    };
+
+    this.hasShownLoginGreeting = true;
+    this.chatService.addMessage(welcomeMessage);
+    this.cdr.detectChanges();
+
+    if (this.autoVoiceEnabled) {
+      setTimeout(() => void this.speakMessage(welcomeMessage), 120);
+    }
+  }
+
+  private setupSpeechRecognition(): void {
+    const SpeechRecognitionCtor =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognitionCtor) {
+      this.speechRecognitionSupported = false;
+      return;
+    }
+
+    this.speechRecognitionSupported = true;
+    this.speechRecognition = new SpeechRecognitionCtor();
+    this.speechRecognition.continuous = true;
+    this.speechRecognition.interimResults = true;
+    this.speechRecognition.lang = 'en-US';
+
+    this.speechRecognition.onresult = (event: any) => {
+      let interimText = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0]?.transcript || '';
+        if (event.results[i].isFinal) {
+          this.speechResult = `${this.speechResult} ${transcript}`.trim();
+        } else {
+          interimText = `${interimText} ${transcript}`.trim();
+        }
+      }
+
+      this.liveTranscript = `${this.speechResult} ${interimText}`.trim();
+      this.cdr.detectChanges();
+    };
+
+    this.speechRecognition.onerror = (event: any) => {
+      this.isListening = false;
+      this.activeMicPointerId = null;
+      if (event?.error === 'not-allowed' || event?.error === 'service-not-allowed') {
+        this.openPopup('Microphone access was blocked. Please allow microphone access.', 'error');
+      }
+      this.cdr.detectChanges();
+    };
+
+    this.speechRecognition.onend = () => {
+      this.isListening = false;
+      this.activeMicPointerId = null;
+      void this.finalizeVoiceCapture();
+      this.cdr.detectChanges();
+    };
+  }
+
+  private async finalizeVoiceCapture(): Promise<void> {
+    if (this.isFinalizingVoiceCapture) {
+      return;
+    }
+
+    this.isFinalizingVoiceCapture = true;
+
+    try {
+      const transcript = this.applySpeechResult();
+      if (!transcript || !this.shouldSendVoiceMessage || this.isLoading) {
+        return;
+      }
+
+      await this.sendMessage();
+    } finally {
+      this.shouldSendVoiceMessage = false;
+      this.isFinalizingVoiceCapture = false;
+    }
+  }
+
+  private applySpeechResult(): string {
+    const transcript = this.liveTranscript.trim() || this.speechResult.trim();
+    this.liveTranscript = '';
+    this.speechResult = '';
+
+    if (!transcript) {
+      return '';
+    }
+
+    this.userInput = this.userInput.trim()
+      ? `${this.userInput.trim()} ${transcript}`.trim()
+      : transcript;
+    this.cdr.detectChanges();
+    return transcript;
   }
 }
