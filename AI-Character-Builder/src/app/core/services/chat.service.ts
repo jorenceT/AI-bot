@@ -18,6 +18,46 @@ export class ChatService {
     return this.messages$.asObservable();
   }
 
+  ensureSessionOpenMarker(characterId: string, openedAt: Date = new Date()): void {
+    if (!this.currentSession || this.currentSession.characterId !== characterId) {
+      this.switchCharacter(characterId);
+    }
+
+    if (!this.currentSession) {
+      this.createSession(characterId);
+    }
+
+    if (!this.currentSession) {
+      return;
+    }
+
+    const lastMarkerIndex = this.findLastSessionOpenMarkerIndex(this.currentSession.messages);
+    if (lastMarkerIndex !== -1) {
+      const messagesAfterMarker = this.currentSession.messages.slice(lastMarkerIndex + 1);
+      const hasRealConversationAfterMarker = messagesAfterMarker.some(message =>
+        message.sender !== 'system' && message.kind !== 'welcome'
+      );
+
+      if (!hasRealConversationAfterMarker) {
+        return;
+      }
+    }
+
+    const lastMessage = this.currentSession.messages[this.currentSession.messages.length - 1];
+    if (lastMessage?.sender === 'system' && lastMessage.kind === 'session-open') {
+      return;
+    }
+
+    this.addMessage({
+      id: `session_open_${openedAt.getTime()}`,
+      text: '',
+      sender: 'system',
+      timestamp: openedAt,
+      characterId,
+      kind: 'session-open'
+    });
+  }
+
   addMessage(message: Message): void {
     if (!this.currentSession) {
       this.createSession(message.characterId);
@@ -117,5 +157,16 @@ export class ChatService {
 
   private generateSessionId(): string {
     return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  }
+
+  private findLastSessionOpenMarkerIndex(messages: Message[]): number {
+    for (let index = messages.length - 1; index >= 0; index--) {
+      const message = messages[index];
+      if (message.sender === 'system' && message.kind === 'session-open') {
+        return index;
+      }
+    }
+
+    return -1;
   }
 }

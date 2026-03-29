@@ -6,6 +6,8 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
+    "backend:start": "node backend/server.mjs",
+    "backend:dev": "node --watch backend/server.mjs",
     "build": "ng build",
     "build:mobile": "ng build --configuration development --delete-output-path=false",
     "watch": "ng build --watch --configuration development",

@@ -1,9 +1,10 @@
 export interface Message {
   id: string;
   text: string;
-  sender: 'user' | 'ai';
+  sender: 'user' | 'ai' | 'system';
   timestamp: Date;
   characterId: string;
+  kind?: 'session-open' | 'welcome';
 }
 
 export interface Character {
@@ -15,6 +16,7 @@ export interface Character {
   systemPrompt: string;
   avatar?: string;
   isActive: boolean;
+  greetingsEnabled?: boolean;
   // optional voice name selected for this character (browser voice.name)
   voice?: string | null;
 }
