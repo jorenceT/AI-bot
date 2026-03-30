@@ -438,7 +438,7 @@ async function generateGeminiText(prompt, candidateModels = [DEFAULT_GEMINI_MODE
     try {
       return await retryWithBackoff(async () => {
         enforceGeminiRateLimit();
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

@@ -553,7 +553,7 @@ export class AIService {
       for (const apiKey of personalKeys) {
         try {
           const responseText = await this.retryWithBackoff(async () => {
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent`;
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent`;
             const headers = new HttpHeaders({
               'Content-Type': 'application/json',
               'X-goog-api-key': apiKey
