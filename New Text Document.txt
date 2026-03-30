@@ -1,9 +1,12 @@
+node server up in git hub
 make sure u use https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent for geminai api call
 add scroll in the add character
 give a checkbox in add character -> very descriptive if its not selected make sure the responses are very short
 add a checkbox in setup geminai section -> followup if selected make the api to sent entair conversation as array for the google api to get all details and respond more accurate but near the foolowup lable give a warning use this if u have a preminum gooogle api key else it might get exhausted faster and u have to create new
 add @capacitor-community/text-to-speech for speech tts also add settings in setup to used between all tts in the application
 also if the 429 or 400 happens give a popup delete old key and project and create new project and key in the gooogle studio in setup and use it. 
+I cant find piper in the setup tts list: `piper` → `speakMessageWithPiper()`
+
 
 
 

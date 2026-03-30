@@ -302,7 +302,7 @@ export class AIService {
 
       // Initialize model if not already loaded
       if (!this.webllmService.isModelLoaded()) {
-        await this.webllmService.initializeModel('tinyllama');
+        await this.webllmService.initializeModel('phi2');
       }
 
       // Send message using WebLLM with optimized settings for speed

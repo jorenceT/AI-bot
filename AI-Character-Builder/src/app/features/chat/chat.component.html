@@ -34,6 +34,39 @@
         </div>
       </div>
 
+      <div class="llm-provider-section">
+        <label>Text-to-Speech Provider</label>
+        <div class="llm-provider-toggle">
+          <button
+            type="button"
+            class="llm-provider-btn"
+            [class.is-active]="tempTtsProvider === 'system'"
+            (click)="tempTtsProvider = 'system'"
+          >
+            <span class="llm-provider-name">System</span>
+            <span class="llm-provider-desc">Browser/device TTS</span>
+          </button>
+          <button
+            type="button"
+            class="llm-provider-btn"
+            [class.is-active]="tempTtsProvider === 'capacitor'"
+            (click)="tempTtsProvider = 'capacitor'"
+          >
+            <span class="llm-provider-name">Capacitor</span>
+            <span class="llm-provider-desc">Native mobile TTS</span>
+          </button>
+          <button
+            type="button"
+            class="llm-provider-btn"
+            [class.is-active]="tempTtsProvider === 'gemini'"
+            (click)="tempTtsProvider = 'gemini'"
+          >
+            <span class="llm-provider-name">Gemini</span>
+            <span class="llm-provider-desc">Google Cloud TTS</span>
+          </button>
+        </div>
+      </div>
+
       <div class="api-keys-section" *ngIf="tempLlmProvider === 'gemini'">
         <div class="api-keys-header">
           <label>Personal Gemini Keys</label>

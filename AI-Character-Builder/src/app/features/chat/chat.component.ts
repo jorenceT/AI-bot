@@ -2,6 +2,7 @@ import { Component, OnInit, ChangeDetectorRef, Input, OnDestroy, NgZone } from '
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Capacitor, CapacitorHttp, registerPlugin } from '@capacitor/core';
+import { TextToSpeech } from '@capacitor-community/text-to-speech';
 import { Observable } from 'rxjs';
 import { Message, Character } from '../../core/models/ai.models';
 import { ChatService } from '../../core/services/chat.service';
@@ -88,8 +89,8 @@ export class ChatComponent implements OnInit {
   tempUseServerAi = false;
   backendBaseUrl = '';
   tempBackendBaseUrl = '';
-  ttsProvider: 'system' | 'piper' | 'gemini' = 'system';
-  tempTtsProvider: 'system' | 'piper' | 'gemini' = 'system';
+  ttsProvider: 'system' | 'piper' | 'gemini' | 'capacitor' = 'system';
+  tempTtsProvider: 'system' | 'piper' | 'gemini' | 'capacitor' = 'system';
   llmProvider: LlmProvider = 'tinyllama';
   tempLlmProvider: LlmProvider = 'tinyllama';
   tinyllamaApiKey = '';
@@ -943,12 +944,53 @@ export class ChatComponent implements OnInit {
       return;
     }
 
+    if (this.ttsProvider === 'capacitor') {
+      await this.speakMessageWithCapacitorTts(msg);
+      return;
+    }
+
     if (this.isPiperTtsReady()) {
       await this.speakMessageWithPiper(msg);
       return;
     }
 
     await this.speakMessageWithSystemTts(msg);
+  }
+
+  private async speakMessageWithCapacitorTts(msg: Message): Promise<void> {
+    const text = msg.text.trim();
+    if (!text) {
+      this.openPopup('There is no message text to read aloud.', 'info');
+      return;
+    }
+
+    this.stopSpeaking();
+    this.currentSpeakingMessageId = msg.id;
+    this.cdr.detectChanges();
+
+    try {
+      const character = this.characters.find(c => c.id === msg.characterId);
+      const speechSettings = this.getSpeechSettings(msg.characterId, character);
+      
+      await TextToSpeech.speak({
+        text: text,
+        lang: 'en-US',
+        rate: speechSettings.rate,
+        pitch: speechSettings.pitch,
+        volume: speechSettings.volume,
+        category: 'playback'
+      });
+
+      this.currentSpeakingMessageId = null;
+      this.cdr.detectChanges();
+    } catch (error: any) {
+      this.currentSpeakingMessageId = null;
+      // Only show error if it's not a stop/cancel action
+      if (!error?.message?.includes('cancel') && !error?.message?.includes('stop')) {
+        this.openPopup('Capacitor TTS failed. Check your device TTS settings.', 'error');
+      }
+      this.cdr.detectChanges();
+    }
   }
 
   // Load available voices and choose a preferred one for more natural speech
@@ -1398,7 +1440,9 @@ export class ChatComponent implements OnInit {
   stopSpeaking(): void {
     this.stopPiperAudio();
 
-    if (this.isNativeAndroid()) {
+    if (this.ttsProvider === 'capacitor') {
+      void TextToSpeech.stop().catch(() => undefined);
+    } else if (this.isNativeAndroid()) {
       void AndroidTts.stop().catch(() => undefined);
     } else {
       try {
