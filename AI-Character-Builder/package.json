@@ -31,6 +31,11 @@
     "@capacitor/android": "^8.2.0",
     "@capacitor/cli": "^8.2.0",
     "@capacitor/core": "^8.2.0",
+    "@mlc-ai/web-llm": "^0.2.82",
+    "@mlc-ai/web-runtime": "^0.24.0-dev2",
+    "@mlc-ai/web-tokenizers": "^0.1.6",
+    "@mlc-ai/web-xgrammar": "^0.1.27",
+    "@types/chrome": "^0.1.38",
     "rxjs": "^7.8.0",
     "tslib": "^2.6.0",
     "zone.js": "^0.14.0"
@@ -40,6 +45,7 @@
     "@angular/cli": "^17.0.0",
     "@angular/compiler-cli": "^17.0.0",
     "@types/node": "^20.0.0",
+    "@webgpu/types": "^0.1.69",
     "typescript": "^5.4.5"
   }
 }

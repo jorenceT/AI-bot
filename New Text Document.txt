@@ -1,0 +1,62 @@
+make sure u use https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent for geminai api call
+add scroll in the add character
+give a checkbox in add character -> very descriptive if its not selected make sure the responses are very short
+add a checkbox in setup geminai section -> followup if selected make the api to sent entair conversation as array for the google api to get all details and respond more accurate but near the foolowup lable give a warning use this if u have a preminum gooogle api key else it might get exhausted faster and u have to create new
+add @capacitor-community/text-to-speech for speech tts also add settings in setup to used between all tts in the application
+also if the 429 or 400 happens give a popup delete old key and project and create new project and key in the gooogle studio in setup and use it. 
+
+
+
+AI on Google Search is stateless. The AI does not store your conversation history. Each prompt is a new interaction unless previous messages are sent with each new request.
+To make the AI remember it is "Noddy", the "Chat History" needs to be managed.
+1. Update the JSON Body
+Send the entire array of messages in the contents field.
+Example:
+json
+{
+  "contents": [
+    {
+      "role": "user",
+      "parts": [{ "text": "Hi, who are you?" }]
+    },
+    {
+      "role": "model",
+      "parts": [{ "text": "Hello! I am Noddy from Toyland! Brrm brrm!" }]
+    },
+    {
+      "role": "user",
+      "parts": [{ "text": "Where is your car?" }]
+    }
+  ]
+}
+Use code with caution.
+
+2. Add a System Instruction
+Use the system_instruction field (available in v1beta) to keep the AI as Noddy. This is separate from the conversation history.
+Example:
+json
+{
+  "system_instruction": {
+    "parts": [
+      { "text": "You are Noddy, the character from Toyland. Always be cheerful, use his catchphrases, and never break character." }
+    ]
+  },
+  "contents": [
+    {
+      "role": "user",
+      "parts": [{ "text": "How are you today?" }]
+    }
+  ]
+}
+Use code with caution.
+
+3. Handling in an Angular App
+In code:
+Create an array to store the chat.
+Add the user's message to the array.
+Send the entire array to the API.
+Add the model's response to the array for the next turn.
+Note: Long conversations use more tokens, which can increase costs or hit rate limits.
+
+can you make webllm to be used from node_module itself and not from assets and delete from assets?
+can you download the webllm and keep it in assets folder and use it from there?

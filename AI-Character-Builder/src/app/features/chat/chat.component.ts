@@ -6,8 +6,9 @@ import { Observable } from 'rxjs';
 import { Message, Character } from '../../core/models/ai.models';
 import { ChatService } from '../../core/services/chat.service';
 import { CharacterService } from '../../core/services/character.service';
-import { AIService, CharacterVoiceProfile } from '../../core/services/ai.service';
+import { AIService, CharacterVoiceProfile, LlmProvider } from '../../core/services/ai.service';
 import { FamousPersonService } from '../../core/services/famous-person.service';
+import { WebLLMService } from '../../core/services/webllm.service';
 import { environment } from '../../../environments/environment';
 
 interface RuntimeVoiceProfile extends CharacterVoiceProfile {
@@ -89,6 +90,10 @@ export class ChatComponent implements OnInit {
   tempBackendBaseUrl = '';
   ttsProvider: 'system' | 'piper' | 'gemini' = 'system';
   tempTtsProvider: 'system' | 'piper' | 'gemini' = 'system';
+  llmProvider: LlmProvider = 'tinyllama';
+  tempLlmProvider: LlmProvider = 'tinyllama';
+  tinyllamaApiKey = '';
+  tempTinyllamaApiKey = '';
   piperTtsEndpoint = ChatComponent.DEFAULT_PIPER_ENDPOINT;
   tempPiperTtsEndpoint = ChatComponent.DEFAULT_PIPER_ENDPOINT;
   geminiTtsProjectId = '';
@@ -160,12 +165,20 @@ export class ChatComponent implements OnInit {
   private piperAudioUrl: string | null = null;
   private suppressNextWelcomeMessage = false;
   private forceNextWelcomeCharacterId: string | null = null;
+  lastFailedMessage: string | null = null;
+  lastFailedCharacterId: string | null = null;
+  
+  // WebLLM loading state
+  isWebLLMLoading = false;
+  webLLMProgress = 0;
+  webLLMLoadingText = '';
 
   constructor(
     private chatService: ChatService,
     private characterService: CharacterService,
     private aiService: AIService,
     private famousPersonService: FamousPersonService,
+    private webllmService: WebLLMService,
     private cdr: ChangeDetectorRef,
     private ngZone: NgZone
   ) {
@@ -390,11 +403,20 @@ export class ChatComponent implements OnInit {
   }
 
   checkApiKey(): void {
-    this.apiKeySet = this.aiService.hasApiKey();
+    // TinyLlama uses local ollama via backend, no API key needed
+    if (this.aiService.getLlmProvider() === 'tinyllama') {
+      this.apiKeySet = true; // TinyLlama doesn't need API key validation
+    } else {
+      this.apiKeySet = this.aiService.hasApiKey();
+    }
     this.useServerAi = this.aiService.isBackendAiPreferred();
     this.tempUseServerAi = this.useServerAi;
     this.backendBaseUrl = this.aiService.getBackendBaseUrl();
     this.tempBackendBaseUrl = this.backendBaseUrl;
+    this.llmProvider = this.aiService.getLlmProvider();
+    this.tempLlmProvider = this.llmProvider;
+    this.tinyllamaApiKey = this.aiService.getTinyllamaApiKey();
+    this.tempTinyllamaApiKey = this.tinyllamaApiKey;
   }
 
   private normalizeTempApiKeys(): void {
@@ -415,7 +437,17 @@ export class ChatComponent implements OnInit {
   }
 
   canSaveApiKeys(): boolean {
-    return !this.isSavingApiKey && (this.hasAnyTempApiKeys() || this.tempUseServerAi || this.apiKeySet || this.aiService.isBackendConfigured());
+    if (this.isSavingApiKey) {
+      return false;
+    }
+    
+    // If WebLLM (TinyLlama) is selected, always allow save (no config needed)
+    if (this.tempLlmProvider === 'tinyllama') {
+      return true;
+    }
+    
+    // For Gemini, use existing logic
+    return this.hasAnyTempApiKeys() || this.tempUseServerAi || this.apiKeySet || this.aiService.isBackendConfigured();
   }
 
   canClearApiKeys(): boolean {
@@ -499,6 +531,8 @@ export class ChatComponent implements OnInit {
     this.tempGeminiTtsLocale = this.geminiTtsLocale;
     this.tempGeminiTtsModel = this.geminiTtsModel;
     this.tempGeminiTtsUseLiveServer = this.geminiTtsUseLiveServer;
+    this.tempLlmProvider = this.llmProvider;
+    this.tempTinyllamaApiKey = this.tinyllamaApiKey;
   }
 
   closeApiKeyDialog(): void {
@@ -521,6 +555,8 @@ export class ChatComponent implements OnInit {
     this.tempGeminiTtsLocale = this.geminiTtsLocale;
     this.tempGeminiTtsModel = this.geminiTtsModel;
     this.tempGeminiTtsUseLiveServer = this.geminiTtsUseLiveServer;
+    this.tempLlmProvider = this.llmProvider;
+    this.tempTinyllamaApiKey = this.tinyllamaApiKey;
   }
 
   toggleCharacterSection(): void {
@@ -539,9 +575,13 @@ export class ChatComponent implements OnInit {
     try {
       this.aiService.setPersonalApiKeys(this.tempApiKeys);
       this.aiService.setBackendConfig(this.tempBackendBaseUrl, this.tempUseServerAi);
+      this.aiService.setLlmProvider(this.tempLlmProvider);
+      this.aiService.setTinyllamaApiKey(this.tempTinyllamaApiKey);
       this.useServerAi = this.aiService.isBackendAiPreferred();
       this.backendBaseUrl = this.aiService.getBackendBaseUrl();
       this.apiKeySet = this.aiService.hasApiKey();
+      this.llmProvider = this.aiService.getLlmProvider();
+      this.tinyllamaApiKey = this.aiService.getTinyllamaApiKey();
       this.saveTtsSettings();
       this.closePopup();
       this.showApiKeyDialog = false;
@@ -551,6 +591,8 @@ export class ChatComponent implements OnInit {
       }
       this.tempUseServerAi = this.useServerAi;
       this.tempBackendBaseUrl = this.backendBaseUrl;
+      this.tempLlmProvider = this.llmProvider;
+      this.tempTinyllamaApiKey = this.tinyllamaApiKey;
       this.cdr.detectChanges();
 
       // Run voice-profile generation after the modal closes and only for the active character.
@@ -593,14 +635,52 @@ export class ChatComponent implements OnInit {
   async sendMessage(): Promise<void> {
     if (!this.userInput.trim()) return;
     if (!this.apiKeySet) {
-      this.openPopup('Please enable server AI or set your Google Gemini API key first', 'error');
+      if (this.llmProvider === 'tinyllama') {
+        this.openPopup('Please configure the backend URL in Setup to use TinyLlama', 'error');
+      } else {
+        this.openPopup('Please enable server AI or set your Google Gemini API key first', 'error');
+      }
       this.openApiKeyDialog();
       return;
+    }
+
+    // Check if WebLLM needs to be initialized for TinyLlama
+    if (this.llmProvider === 'tinyllama' && !this.webllmService.isModelLoaded()) {
+      this.isWebLLMLoading = true;
+      this.webLLMProgress = 0;
+      this.webLLMLoadingText = 'Initializing WebLLM...';
+      this.loadingScreenTitle = 'Loading TinyLlama Model...';
+      this.loadingScreenSubtitle = 'Please wait while the AI model loads in your browser.';
+      this.isGreetingLoading = true;
+      this.cdr.detectChanges();
+
+      try {
+        await this.webllmService.initializeModel('tinyllama', (progress) => {
+          this.webLLMProgress = progress.progress;
+          this.webLLMLoadingText = progress.text;
+          this.loadingScreenSubtitle = progress.text;
+          this.cdr.detectChanges();
+        });
+      } catch (error: any) {
+        this.isWebLLMLoading = false;
+        this.isGreetingLoading = false;
+        this.openPopup(error?.message || 'Failed to load TinyLlama model', 'error');
+        this.cdr.detectChanges();
+        return;
+      } finally {
+        this.isWebLLMLoading = false;
+        this.isGreetingLoading = false;
+        this.loadingScreenTitle = 'Connecting to AI...';
+        this.loadingScreenSubtitle = 'Please wait while your bot gets ready.';
+        this.cdr.detectChanges();
+      }
     }
 
     const text = this.userInput;
     this.userInput = '';
     this.isLoading = true;
+    this.lastFailedMessage = null;
+    this.lastFailedCharacterId = null;
     this.cdr.detectChanges();
 
     try {
@@ -634,6 +714,8 @@ export class ChatComponent implements OnInit {
         };
         this.chatService.addMessage(aiMessage);
         this.setLastGreetingFlag(this.activeCharacterId, false);
+        this.lastFailedMessage = null;
+        this.lastFailedCharacterId = null;
         this.cdr.detectChanges();
 
         if (this.autoVoiceEnabled) {
@@ -643,6 +725,68 @@ export class ChatComponent implements OnInit {
 
     } catch (error: any) {
       this.ngZone.run(() => {
+        this.lastFailedMessage = text;
+        this.lastFailedCharacterId = this.activeCharacterId;
+        if (!this.handleAiRateLimitError(error, 'error')) {
+          this.openPopup(error?.message || 'Something went wrong', 'error');
+        }
+        this.cdr.detectChanges();
+      });
+      console.error('Error:', error);
+    } finally {
+      this.ngZone.run(() => {
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      });
+    }
+  }
+
+  async retryLastMessage(): Promise<void> {
+    if (!this.lastFailedMessage || !this.lastFailedCharacterId) return;
+    if (!this.apiKeySet) {
+      if (this.llmProvider === 'tinyllama') {
+        this.openPopup('Please configure the backend URL in Setup to use TinyLlama', 'error');
+      } else {
+        this.openPopup('Please enable server AI or set your Google Gemini API key first', 'error');
+      }
+      this.openApiKeyDialog();
+      return;
+    }
+
+    const text = this.lastFailedMessage;
+    const characterId = this.lastFailedCharacterId;
+    this.lastFailedMessage = null;
+    this.lastFailedCharacterId = null;
+    this.isLoading = true;
+    this.cdr.detectChanges();
+
+    try {
+      const activeChar = this.characters.find(c => c.id === characterId);
+      if (!activeChar) return;
+
+      const aiResponse = await this.aiService.sendMessage(text, characterId, activeChar);
+
+      this.ngZone.run(() => {
+        const aiMessage: Message = {
+          id: 'msg_' + Date.now() + '_ai',
+          text: aiResponse,
+          sender: 'ai',
+          timestamp: new Date(),
+          characterId: characterId
+        };
+        this.chatService.addMessage(aiMessage);
+        this.setLastGreetingFlag(characterId, false);
+        this.cdr.detectChanges();
+
+        if (this.autoVoiceEnabled) {
+          setTimeout(() => void this.speakMessage(aiMessage), 50);
+        }
+      });
+
+    } catch (error: any) {
+      this.ngZone.run(() => {
+        this.lastFailedMessage = text;
+        this.lastFailedCharacterId = characterId;
         if (!this.handleAiRateLimitError(error, 'error')) {
           this.openPopup(error?.message || 'Something went wrong', 'error');
         }

@@ -10,12 +10,36 @@
       <h3>Setup</h3>
       <p>Set a Google Gemini API key for personal mode, or leave it blank if this app is configured to use your backend quota.</p>
       <p class="hint">Get a free key at <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com/app/apikey</a>. If you add your own Gemini keys here, they stay on your device for your own use and Gemini requests will go directly from your app instead of being sent to our backend.</p>
-      <div class="api-keys-section">
+      <div class="llm-provider-section">
+        <label>AI Model Provider</label>
+        <div class="llm-provider-toggle">
+          <button
+            type="button"
+            class="llm-provider-btn"
+            [class.is-active]="tempLlmProvider === 'gemini'"
+            (click)="tempLlmProvider = 'gemini'"
+          >
+            <span class="llm-provider-name">Gemini</span>
+            <span class="llm-provider-desc">Google's powerful AI</span>
+          </button>
+          <button
+            type="button"
+            class="llm-provider-btn"
+            [class.is-active]="tempLlmProvider === 'tinyllama'"
+            (click)="tempLlmProvider = 'tinyllama'"
+          >
+            <span class="llm-provider-name">WebLLM</span>
+            <span class="llm-provider-desc">Browser-based AI (no server needed)</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="api-keys-section" *ngIf="tempLlmProvider === 'gemini'">
         <div class="api-keys-header">
           <label>Personal Gemini Keys</label>
           <button type="button" class="btn-add-key" (click)="addApiKeyField()" aria-label="Add Gemini key">+</button>
         </div>
-        <p class="hint">Add more personal keys to support more requests per minute (RPM).</p>
+        <p class="hint">Add more personal keys to support more requests per minute (RPM), One free key can support 15 RPM Only above that need to create a new free key deleting the old one.</p>
         <div class="api-key-row" *ngFor="let apiKey of tempApiKeys; let keyIndex = index">
           <input
             type="text"
@@ -33,6 +57,13 @@
             Remove
           </button>
         </div>
+      </div>
+
+      <div class="api-keys-section" *ngIf="tempLlmProvider === 'tinyllama'">
+        <div class="api-keys-header">
+          <label>WebLLM (Browser-based)</label>
+        </div>
+        <p class="hint">WebLLM runs entirely in your browser using WebGPU. No server configuration needed. The AI model will be downloaded on first use (~500MB).</p>
       </div>
       <div class="modal-buttons">
         <button type="button" (click)="saveApiKey()" class="btn-primary" [disabled]="!canSaveApiKeys()">
@@ -189,11 +220,17 @@
     </div>
   </div>
 
-  <div *ngIf="isGreetingLoading || isCharacterSetupLoading" class="greeting-loading-screen global-loading-screen" role="status" aria-live="polite">
+  <div *ngIf="isGreetingLoading || isCharacterSetupLoading || isWebLLMLoading" class="greeting-loading-screen global-loading-screen" role="status" aria-live="polite">
     <div class="greeting-loading-card">
       <div class="greeting-loading-spinner" aria-hidden="true"></div>
       <div class="greeting-loading-title">{{ loadingScreenTitle }}</div>
       <div class="greeting-loading-subtitle">{{ loadingScreenSubtitle }}</div>
+      <div *ngIf="isWebLLMLoading" class="webllm-progress-container">
+        <div class="webllm-progress-bar">
+          <div class="webllm-progress-fill" [style.width.%]="webLLMProgress"></div>
+        </div>
+        <div class="webllm-progress-text">{{ webLLMProgress }}% - {{ webLLMLoadingText }}</div>
+      </div>
     </div>
   </div>
 
@@ -232,6 +269,14 @@
     </div>
     <div *ngIf="isLoading && !isGreetingLoading" class="loading-indicator">
       <p>AI is thinking...</p>
+    </div>
+    <div *ngIf="lastFailedMessage && !isLoading" class="retry-container">
+      <button (click)="retryLastMessage()" class="btn-retry" title="Retry getting AI response">
+        <svg class="retry-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+        </svg>
+        <span>Retry</span>
+      </button>
     </div>
   </div>
 
@@ -284,8 +329,11 @@
         </button>
       </div>
     </div>
-    <div *ngIf="!apiKeySet" class="api-warning">
+    <div *ngIf="!apiKeySet && llmProvider === 'gemini'" class="api-warning">
       Please set your Google Gemini API key to enable AI responses
+    </div>
+    <div *ngIf="!apiKeySet && llmProvider === 'tinyllama'" class="api-warning">
+      WebLLM is ready to use - no configuration needed
     </div>
   </div>
 </div>

@@ -3,6 +3,9 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable, Subject } from 'rxjs';
 import { Message, Character } from '../models/ai.models';
 import { environment } from '../../../environments/environment';
+import { WebLLMService } from './webllm.service';
+
+export type LlmProvider = 'gemini' | 'tinyllama';
 
 interface GeminiContent {
   parts: { text: string }[];
@@ -46,6 +49,7 @@ interface GeminiEmbeddingResponse {
   };
 }
 
+
 export interface CharacterVoiceProfile {
   voiceHints: string[];
   langHints: string[];
@@ -68,6 +72,8 @@ export class AIService {
   private static readonly PERSONAL_API_KEYS_STORAGE_KEY = 'geminiApiKeys';
   private static readonly BACKEND_BASE_URL_STORAGE_KEY = 'backendBaseUrl';
   private static readonly PREFER_BACKEND_AI_STORAGE_KEY = 'preferBackendAi';
+  private static readonly LLM_PROVIDER_STORAGE_KEY = 'llmProvider';
+  private static readonly TINYLLAMA_API_KEY_STORAGE_KEY = 'tinyllamaApiKey';
   private readonly requestTimestamps: number[] = [];
   private personalApiKeys: string[] = [];
   private readonly personalKeyRequestTimestamps: Record<string, number[]> = {};
@@ -76,8 +82,13 @@ export class AIService {
   private messages$ = new Subject<Message>();
   private backendBaseUrl = '';
   private preferBackendAi = environment.preferBackendAi !== false;
+  private llmProvider: LlmProvider = 'tinyllama';
+  private tinyllamaApiKey = '';
 
-  constructor(private http: HttpClient) {
+  constructor(
+    private http: HttpClient,
+    private webllmService: WebLLMService
+  ) {
     this.initializeApiKey();
   }
 
@@ -92,6 +103,10 @@ export class AIService {
     this.preferBackendAi = storedPreferBackendAi === null
       ? (environment.preferBackendAi !== false)
       : storedPreferBackendAi === 'true';
+
+    const storedProvider = localStorage.getItem(AIService.LLM_PROVIDER_STORAGE_KEY) as LlmProvider | null;
+    this.llmProvider = storedProvider === 'tinyllama' ? 'tinyllama' : 'gemini';
+    this.tinyllamaApiKey = (localStorage.getItem(AIService.TINYLLAMA_API_KEY_STORAGE_KEY) || '').trim();
   }
 
   setApiKey(key: string): void {
@@ -204,7 +219,52 @@ export class AIService {
     return status.remaining >= (requiredRequests + reservedForChat);
   }
 
+  // ── LLM Provider selection ──────────────────────────────────────────────────
+
+  getLlmProvider(): LlmProvider {
+    return this.llmProvider;
+  }
+
+  setLlmProvider(provider: LlmProvider): void {
+    this.llmProvider = provider;
+    localStorage.setItem(AIService.LLM_PROVIDER_STORAGE_KEY, provider);
+  }
+
+  getTinyllamaApiKey(): string {
+    return this.tinyllamaApiKey;
+  }
+
+  setTinyllamaApiKey(key: string): void {
+    this.tinyllamaApiKey = (key || '').trim();
+    if (this.tinyllamaApiKey) {
+      localStorage.setItem(AIService.TINYLLAMA_API_KEY_STORAGE_KEY, this.tinyllamaApiKey);
+    } else {
+      localStorage.removeItem(AIService.TINYLLAMA_API_KEY_STORAGE_KEY);
+    }
+  }
+
+  hasTinyllamaApiKey(): boolean {
+    return !!this.tinyllamaApiKey;
+  }
+
+  /** Returns true when the currently selected provider is ready to handle requests. */
+  hasActiveProviderKey(): boolean {
+    if (this.llmProvider === 'tinyllama') {
+      return this.hasTinyllamaApiKey();
+    }
+    return this.hasApiKey();
+  }
+
+  // ── Message sending ─────────────────────────────────────────────────────────
+
   async sendMessage(text: string, activeCharacterId: string, characterData: any): Promise<string> {
+    if (this.llmProvider === 'tinyllama') {
+      return this.sendMessageWithTinyLlama(text, characterData);
+    }
+    return this.sendMessageWithGemini(text, activeCharacterId, characterData);
+  }
+
+  private async sendMessageWithGemini(text: string, activeCharacterId: string, characterData: any): Promise<string> {
     if (!this.hasApiKey()) {
       throw new Error('AI backend or Google Gemini API key not configured. Please set it in settings.');
     }
@@ -222,11 +282,40 @@ export class AIService {
       });
       return aiResponse.substring(0, 1000);
     } catch (error: any) {
-      console.error('AI Service Error:', error);
+      console.error('Gemini AI Service Error:', error);
       if (this.isMinuteRateLimitError(error)) {
         throw new Error('Gemini rate limit reached. Please wait a moment and try again.');
       }
       throw new Error(`Failed to get AI response: ${error.message}`);
+    }
+  }
+
+  private async sendMessageWithTinyLlama(text: string, characterData: any): Promise<string> {
+    const systemPrompt = characterData.systemPrompt || 'You are a helpful assistant.';
+
+    // Use WebLLM for browser-based inference
+    try {
+      // Check if WebGPU is supported
+      if (!this.webllmService.isWebGPUSupported()) {
+        throw new Error('WebGPU is not supported in this browser. Please use Chrome or Edge with WebGPU enabled.');
+      }
+
+      // Initialize model if not already loaded
+      if (!this.webllmService.isModelLoaded()) {
+        await this.webllmService.initializeModel('tinyllama');
+      }
+
+      // Send message using WebLLM with optimized settings for speed
+      const response = await this.webllmService.sendMessage(text, systemPrompt, {
+        temperature: 0.6,  // Lower temperature for faster, more deterministic responses
+        maxTokens: 256,    // Reduced from 512 for faster generation
+        topP: 0.85         // Slightly lower for faster sampling
+      });
+
+      return response.text.substring(0, 800);  // Reduced max length for faster responses
+    } catch (error: any) {
+      console.error('TinyLlama WebLLM Error:', error);
+      throw new Error(`TinyLlama error: ${error.message || 'Unknown error'}`);
     }
   }
 

@@ -45,6 +45,7 @@ export interface ResolvedKnownFigure {
 })
 export class FamousPersonService {
   private static readonly CACHE_KEY = 'famousPersonProfiles';
+  private static readonly CACHE_VERSION = 'v3'; // Increment this when system prompt changes
   private readonly cache = new Map<string, FamousPersonaProfile>();
 
   constructor(private http: HttpClient) {
@@ -192,12 +193,13 @@ export class FamousPersonService {
     const tone = toneTraits.join(', ');
     const backstory = firstSentence || `${title} is a notable well-known figure.`;
     const systemPrompt = [
-      `Speak in a style inspired by ${title}'s public persona.`,
-      `Keep the voice ${tone}.`,
-      `Carry a ${personality} presence.`,
-      'Do not claim to be the literal real-world person.',
-      'Avoid making up personal facts that are not broadly known.',
-      'Stay warm, in-character, and concise.'
+      `IMPORTANT: You are ${title}. You must speak ONLY as ${title} in first person.`,
+      `Never give advice about ${title}. Never recommend books or resources about ${title}.`,
+      `You ARE ${title} - respond as if you are actually ${title} speaking.`,
+      `Use "I" and "me" when referring to yourself as ${title}.`,
+      `Speak with a ${tone} tone and ${personality} personality.`,
+      `If asked "how are you", respond as ${title} would, not with advice about ${title}.`,
+      `Stay in character at all times. Never break character or give meta-commentary.`
     ].join(' ');
 
     return { name: title, personality, tone, backstory, systemPrompt, sourceUrl };
@@ -218,12 +220,13 @@ export class FamousPersonService {
         tone: 'direct, calm, confident, reflective, sharpened by martial focus',
         backstory: extract || 'Bruce Lee was an internationally influential martial artist, actor, and thinker known for discipline, precision, and a philosophy of honest self-expression.',
         systemPrompt: [
-          'Speak in a style inspired by Bruce Lee\'s public persona.',
+          'IMPORTANT: You are Bruce Lee. You must speak ONLY as Bruce Lee in first person.',
+          'Never give advice about Bruce Lee. Never recommend books or resources about Bruce Lee.',
+          'You ARE Bruce Lee - respond as if you are actually Bruce Lee speaking.',
+          'Use "I" and "me" when referring to yourself as Bruce Lee.',
           'Be concise, sharp, disciplined, and reflective.',
-          'Use calm confidence, clarity, and philosophical insight.',
-          'Favor self-mastery, adaptability, and truthful expression over generic assistant phrasing.',
-          'Do not claim to be the literal real-world Bruce Lee.',
-          'Stay warm, focused, and in-character.'
+          'If asked "how are you", respond as Bruce Lee would, not with advice about Bruce Lee.',
+          'Stay in character at all times. Never break character or give meta-commentary.'
         ].join(' '),
         sourceUrl
       };
@@ -236,12 +239,13 @@ export class FamousPersonService {
         tone: 'direct, confident, boastful, punchy, informal, emphatic',
         backstory: extract || 'Donald Trump is a businessman and politician known for a brazen, pugnacious, media-dominating public style.',
         systemPrompt: [
-          'Speak in a style inspired by Donald Trump\'s public persona.',
+          'IMPORTANT: You are Donald Trump. You must speak ONLY as Donald Trump in first person.',
+          'Never give advice about Donald Trump. Never recommend books or resources about Donald Trump.',
+          'You ARE Donald Trump - respond as if you are actually Donald Trump speaking.',
+          'Use "I" and "me" when referring to yourself as Donald Trump.',
           'Use short, punchy, self-assured sentences.',
-          'Sound bold, emphatic, and conversational rather than gentle or therapeutic.',
-          'Avoid generic assistant phrasing.',
-          'Do not claim to be the literal real-world Donald Trump.',
-          'Keep it in-character, warm enough to engage, and distinctly confident.'
+          'If asked "how are you", respond as Donald Trump would, not with advice about Donald Trump.',
+          'Stay in character at all times. Never break character or give meta-commentary.'
         ].join(' '),
         sourceUrl
       };
@@ -254,11 +258,13 @@ export class FamousPersonService {
         tone: 'soft, kind, reassuring, patient, nurturing',
         backstory: extract || 'Mother Teresa was a Roman Catholic nun known for service to the poor, the sick, and the dying with humility and compassion.',
         systemPrompt: [
-          'Speak in a style inspired by Mother Teresa\'s public persona.',
+          'IMPORTANT: You are Mother Teresa. You must speak ONLY as Mother Teresa in first person.',
+          'Never give advice about Mother Teresa. Never recommend books or resources about Mother Teresa.',
+          'You ARE Mother Teresa - respond as if you are actually Mother Teresa speaking.',
+          'Use "I" and "me" when referring to yourself as Mother Teresa.',
           'Be gentle, compassionate, humble, and comforting.',
-          'Use simple, sincere language with warmth and grace.',
-          'Avoid generic assistant phrasing and avoid sounding playful or boastful.',
-          'Do not claim to be the literal real-world Mother Teresa.'
+          'If asked "how are you", respond as Mother Teresa would, not with advice about Mother Teresa.',
+          'Stay in character at all times. Never break character or give meta-commentary.'
         ].join(' '),
         sourceUrl
       };
@@ -271,10 +277,13 @@ export class FamousPersonService {
         tone: 'focused, calm, direct, reflective',
         backstory: extract,
         systemPrompt: [
-          `Speak in a style inspired by ${title}'s public persona.`,
+          `IMPORTANT: You are ${title}. You must speak ONLY as ${title} in first person.`,
+          `Never give advice about ${title}. Never recommend books or resources about ${title}.`,
+          `You ARE ${title} - respond as if you are actually ${title} speaking.`,
+          `Use "I" and "me" when referring to yourself as ${title}.`,
           'Be concise, grounded, and thoughtful.',
-          'Let the voice feel disciplined and inwardly strong.',
-          'Do not claim to be the literal real-world person.'
+          `If asked "how are you", respond as ${title} would, not with advice about ${title}.`,
+          'Stay in character at all times. Never break character or give meta-commentary.'
         ].join(' '),
         sourceUrl
       };
@@ -358,6 +367,16 @@ export class FamousPersonService {
 
   private loadCache(): void {
     try {
+      const versionKey = `${FamousPersonService.CACHE_KEY}_version`;
+      const storedVersion = localStorage.getItem(versionKey);
+      
+      // Clear cache if version mismatch
+      if (storedVersion !== FamousPersonService.CACHE_VERSION) {
+        localStorage.removeItem(FamousPersonService.CACHE_KEY);
+        localStorage.setItem(versionKey, FamousPersonService.CACHE_VERSION);
+        return;
+      }
+
       const raw = localStorage.getItem(FamousPersonService.CACHE_KEY);
       if (!raw) {
         return;

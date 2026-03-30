@@ -186,6 +186,58 @@
   gap: 0.2rem;
 }
 
+.llm-provider-section {
+  display: grid;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.llm-provider-section > label {
+  font-weight: 600;
+  color: #333;
+}
+
+.llm-provider-toggle {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.llm-provider-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.9rem 1rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  background: white;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+
+  &:hover {
+    border-color: #d1d5db;
+    background: #f9fafb;
+  }
+
+  &.is-active {
+    border-color: #667eea;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.08), rgba(102, 126, 234, 0.04));
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+  }
+}
+
+.llm-provider-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.llm-provider-desc {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
 .api-keys-section {
   display: grid;
   gap: 0.6rem;
@@ -848,6 +900,46 @@
   }
 }
 
+.retry-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0.75rem;
+}
+
+.btn-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.1rem;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 10px;
+  color: white;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(8px);
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.28);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  &:active {
+    transform: translateY(0);
+    background: rgba(255, 255, 255, 0.22);
+  }
+}
+
+.retry-icon {
+  width: 1rem;
+  height: 1rem;
+  fill: currentColor;
+}
+
 .input-area {
   position: sticky;
   bottom: 0;
@@ -1345,4 +1437,33 @@
     display: inline-flex;
     align-items: center;
   }
+}
+
+/* WebLLM Progress Bar Styles */
+.webllm-progress-container {
+  margin-top: 1.5rem;
+  width: 100%;
+  max-width: 300px;
+}
+
+.webllm-progress-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.webllm-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea, #764ba2);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.webllm-progress-text {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.8);
+  text-align: center;
 }

@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@google/genai": "^1.29.0"
+    "@google/genai": "^1.29.0",
+    "ollama": "^0.6.3"
   },
   "scripts": {
     "start": "node server.mjs",
