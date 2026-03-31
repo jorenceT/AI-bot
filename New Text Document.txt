@@ -1,4 +1,18 @@
 node server up in git hub
+	delete other functionality find a best llm and use it for private ai call/ or just use hugger face api
+or just use hugger face ai model using
+https://www.geeksforgeeks.org/artificial-intelligence/how-to-access-huggingface-api-key/
+Gemma-3 1B is better than phi-2?
+gemma-3-27b-it -> for google chat instead of gemini-2.5-flash-lite
+gemini-2.5-flash-lite -> in tts change it
+
+reduce the promt to "imagin you are {name} from {football or show name etc} and {respond to the message to me}".
+for local bot use all existing messages.
+
+webllm with gram not working -> Cannot find model record in appConfig for gemma-3-1b-it-q4f16_1-MLC. Please check if the model ID is correct and included in the model_list configuration.
+systema and google geminai voice are sounding same.
+capacitor showing this error if not playing sound -> Capacitor TTS failed. Check your device TTS settings.
+by default don't have the greetings on
 make sure u use https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent for geminai api call
 add scroll in the add character
 give a checkbox in add character -> very descriptive if its not selected make sure the responses are very short
@@ -6,7 +20,7 @@ add a checkbox in setup geminai section -> followup if selected make the api to 
 add @capacitor-community/text-to-speech for speech tts also add settings in setup to used between all tts in the application
 also if the 429 or 400 happens give a popup delete old key and project and create new project and key in the gooogle studio in setup and use it. 
 I cant find piper in the setup tts list: `piper` → `speakMessageWithPiper()`
-
+capacitor always having female voice
 
 
 
