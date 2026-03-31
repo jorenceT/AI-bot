@@ -10,7 +10,6 @@ Small Node.js backend for the AI Character Builder app.
 - `POST /api/gemini/voice-profile`
 - `POST /api/gemini/live-tts`
 - `POST /api/piper/speak`
-- `POST /api/tinyllama/chat` (local only - requires Ollama)
 
 ## Deployment
 
@@ -22,8 +21,6 @@ For cloud deployment instructions, see [DEPLOYMENT.md](./DEPLOYMENT.md).
 3. Set root directory to `backend`
 4. Add environment variables (`GEMINI_API_KEY`, `PORT=10000`)
 5. Deploy!
-
-**Note:** The TinyLlama/Ollama endpoint is not available in cloud deployments.
 
 ## Setup
 
@@ -88,5 +85,5 @@ curl -X POST http://localhost:8787/api/piper/speak ^
 ```bash
 curl -X POST http://localhost:8787/api/gemini/live-tts ^
   -H "Content-Type: application/json" ^
-  -d "{\"text\":\"Hey there\",\"voiceName\":\"Zephyr\",\"model\":\"gemini-live-2.5-flash-preview\"}" --output live.wav
+  -d "{\"text\":\"Hey there\",\"voiceName\":\"Zephyr\",\"model\":\"gemma-3-27b-it\"}" --output live.wav
 ```

@@ -26,13 +26,15 @@ export class WebLLMService {
   private loadingProgress = 0;
   private loadingText = '';
   private onProgressCallback: ((progress: WebLLMProgress) => void) | null = null;
+  private readonly supportedModelIds = new Set(
+    webllm.prebuiltAppConfig.model_list.map(model => model.model_id)
+  );
 
-  // Available models - TinyLlama is the smallest and fastest
+  // Available models
   private readonly availableModels: Record<string, string> = {
-    'tinyllama': 'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC',
-    'phi2': 'Phi-3-mini-4k-instruct-q4f16_1-MLC',
-    'gemma': 'gemma-2-2b-it-q4f32_1-MLC',
-    'llama': 'Llama-3.1-8B-Instruct-q4f32_1-MLC'
+    'gemma': 'gemma-2-2b-it-q4f16_1-MLC',
+    'gemma3': 'gemma-2-2b-it-q4f16_1-MLC',
+    'llama': 'Llama-3.2-1B-Instruct-q4f16_1-MLC'
   };
 
   constructor() {}
@@ -59,14 +61,14 @@ export class WebLLMService {
    * Initialize the WebLLM engine with a specific model
    */
   async initializeModel(
-    modelKey: string = 'tinyllama',
+    modelKey: string = 'gemma3',
     onProgress?: (progress: WebLLMProgress) => void
   ): Promise<void> {
     if (!this.isWebGPUSupported()) {
       throw new Error('WebGPU is not supported in this browser. Please use Chrome or Edge with WebGPU enabled.');
     }
 
-    const modelId = this.availableModels[modelKey];
+    const modelId = this.resolveModelId(modelKey);
     if (!modelId) {
       throw new Error(`Unknown model: ${modelKey}. Available models: ${Object.keys(this.availableModels).join(', ')}`);
     }
@@ -234,6 +236,54 @@ export class WebLLMService {
    */
   getAvailableModels(): string[] {
     return Object.keys(this.availableModels);
+  }
+
+  /**
+   * Resolve a configured model alias to a WebLLM-supported model id.
+   * Falls back to a small supported model if an outdated id is configured.
+   */
+  private resolveModelId(modelKey: string): string | null {
+    const configuredModelId = this.availableModels[modelKey];
+    if (!configuredModelId) {
+      return null;
+    }
+
+    if (this.supportedModelIds.has(configuredModelId)) {
+      return configuredModelId;
+    }
+
+    const fallbackModelId = this.getFallbackModelId(modelKey);
+    if (fallbackModelId) {
+      console.warn(
+        `WebLLM model "${configuredModelId}" is not available in this package version. Falling back to "${fallbackModelId}".`
+      );
+      return fallbackModelId;
+    }
+
+    return null;
+  }
+
+  private getFallbackModelId(modelKey: string): string | null {
+    const preferredFallbacks: Record<string, string[]> = {
+      gemma: [
+        'gemma-2-2b-it-q4f16_1-MLC',
+        'gemma-2-2b-it-q4f32_1-MLC',
+        'gemma-2b-it-q4f16_1-MLC'
+      ],
+      gemma3: [
+        'gemma-2-2b-it-q4f16_1-MLC',
+        'gemma-2-2b-it-q4f32_1-MLC',
+        'gemma-2b-it-q4f16_1-MLC'
+      ],
+      llama: [
+        'Llama-3.2-1B-Instruct-q4f16_1-MLC',
+        'Llama-3.2-1B-Instruct-q4f32_1-MLC',
+        'Llama-3.1-8B-Instruct-q4f16_1-MLC'
+      ]
+    };
+
+    const candidates = preferredFallbacks[modelKey] || [];
+    return candidates.find(modelId => this.supportedModelIds.has(modelId)) || null;
   }
 
   /**

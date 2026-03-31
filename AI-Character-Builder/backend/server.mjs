@@ -3,7 +3,6 @@ import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GoogleGenAI, MediaResolution, Modality } from '@google/genai';
-import ollama from 'ollama';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -17,8 +16,8 @@ const APP_ID = (process.env.APP_ID || '').trim();
 const APP_SECRET = (process.env.APP_SECRET || '').trim();
 const MAX_GEMINI_REQUESTS_PER_MINUTE = 14;
 const geminiRequestTimestamps = [];
-const DEFAULT_GEMINI_MODEL = 'gemini-flash-latest';
-const DEFAULT_GEMINI_LIVE_TTS_MODEL = 'gemini-live-2.5-flash-preview';
+const DEFAULT_GEMINI_MODEL = 'gemma-3-27b-it';
+const DEFAULT_GEMINI_LIVE_TTS_MODEL = 'gemini-2.5-flash-tts';
 const DEFAULT_GEMINI_LIVE_TTS_VOICE = 'Zephyr';
 
 const server = createServer(async (req, res) => {
@@ -86,13 +85,6 @@ const server = createServer(async (req, res) => {
         return sendJson(res, 401, { error: 'Unauthorized app request.' });
       }
       return await handlePiperSpeak(req, res);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/tinyllama/chat') {
-      if (!isAuthorized(req)) {
-        return sendJson(res, 401, { error: 'Unauthorized app request.' });
-      }
-      return await handleTinyLlamaChat(req, res);
     }
 
     return sendJson(res, 404, {
@@ -369,68 +361,6 @@ async function handleGeminiLiveTts(req, res) {
   }
 }
 
-async function handleTinyLlamaChat(req, res) {
-  const body = await readJsonBody(req);
-  const text = String(body?.text || '').trim();
-  const characterData = body?.characterData || {};
-  const maxRetries = Number(body?.maxRetries ?? 2);
-
-  if (!text) {
-    return sendJson(res, 400, {
-      error: 'text is required.'
-    });
-  }
-
-  // Check if running in cloud environment (Render, Railway, etc.)
-  const isCloudEnvironment = process.env.RENDER || process.env.RAILWAY || process.env.HEROKU || process.env.FLY_APP_NAME;
-  
-  if (isCloudEnvironment) {
-    return sendJson(res, 503, {
-      error: 'TinyLlama/Ollama is not available in cloud deployments. This feature requires local installation of Ollama. Please use Gemini endpoints instead.'
-    });
-  }
-
-  const systemPrompt = String(characterData.systemPrompt || 'You are a helpful assistant.');
-
-  try {
-    const result = await retryWithBackoff(async () => {
-      const response = await ollama.chat({
-        model: 'tinyllama',
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt
-          },
-          {
-            role: 'user',
-            content: text
-          }
-        ],
-        options: {
-          temperature: 0.7,
-          top_p: 0.9,
-          num_predict: 300
-        }
-      });
-
-      const generatedText = response?.message?.content || '';
-
-      if (!generatedText) {
-        throw new Error('Empty response from TinyLlama');
-      }
-
-      return generatedText.trim();
-    }, maxRetries);
-
-    return sendJson(res, 200, {
-      text: result.substring(0, 1000)
-    });
-  } catch (error) {
-    console.error('TinyLlama Error:', error);
-    return handleFetchError(res, error, 'TinyLlama request failed. Make sure ollama is running and tinyllama model is installed.');
-  }
-}
-
 async function generateGeminiText(prompt, candidateModels = [DEFAULT_GEMINI_MODEL]) {
   let lastError = null;
 
@@ -438,7 +368,7 @@ async function generateGeminiText(prompt, candidateModels = [DEFAULT_GEMINI_MODE
     try {
       return await retryWithBackoff(async () => {
         enforceGeminiRateLimit();
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

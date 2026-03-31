@@ -1,0 +1,219 @@
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+
+  h3 {
+    margin: 0 0 16px 0;
+    font-size: 1.5em;
+    color: #333;
+  }
+
+  p {
+    margin: 0 0 12px 0;
+    color: #666;
+    line-height: 1.5;
+  }
+
+  .hint {
+    font-size: 0.9em;
+    color: #888;
+    margin-bottom: 20px;
+
+    a {
+      color: #007bff;
+      text-decoration: none;
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+  }
+}
+
+.llm-provider-section {
+  margin-bottom: 24px;
+
+  label {
+    display: block;
+    margin-bottom: 12px;
+    font-weight: 600;
+    color: #333;
+  }
+}
+
+.llm-provider-toggle {
+  display: flex;
+  gap: 12px;
+}
+
+.llm-provider-btn {
+  flex: 1;
+  padding: 16px;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+
+  &:hover {
+    border-color: #007bff;
+  }
+
+  &.is-active {
+    border-color: #007bff;
+    background: #f0f7ff;
+  }
+}
+
+.llm-provider-name {
+  display: block;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.llm-provider-desc {
+  display: block;
+  font-size: 0.85em;
+  color: #666;
+}
+
+.api-keys-section {
+  margin-bottom: 24px;
+}
+
+.api-keys-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+
+  label {
+    font-weight: 600;
+    color: #333;
+  }
+}
+
+.btn-add-key {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: #007bff;
+  color: white;
+  font-size: 1.2em;
+  cursor: pointer;
+  transition: background 0.2s;
+
+  &:hover {
+    background: #0056b3;
+  }
+}
+
+.api-key-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.api-key-input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 1em;
+
+  &:focus {
+    outline: none;
+    border-color: #007bff;
+  }
+}
+
+.btn-remove-key {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #dc3545;
+  color: white;
+  cursor: pointer;
+  transition: background 0.2s;
+
+  &:hover:not(:disabled) {
+    background: #c82333;
+  }
+
+  &:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+  }
+}
+
+.modal-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-danger {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 1em;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-primary {
+  background: #007bff;
+  color: white;
+
+  &:hover:not(:disabled) {
+    background: #0056b3;
+  }
+
+  &:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+  }
+}
+
+.btn-secondary {
+  background: #6c757d;
+  color: white;
+
+  &:hover {
+    background: #545b62;
+  }
+}
+
+.btn-danger {
+  background: #dc3545;
+  color: white;
+
+  &:hover {
+    background: #c82333;
+  }
+}

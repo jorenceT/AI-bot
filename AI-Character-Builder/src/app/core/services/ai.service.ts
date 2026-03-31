@@ -5,7 +5,7 @@ import { Message, Character } from '../models/ai.models';
 import { environment } from '../../../environments/environment';
 import { WebLLMService } from './webllm.service';
 
-export type LlmProvider = 'gemini' | 'tinyllama';
+export type LlmProvider = 'gemini' | 'webllm';
 
 interface GeminiContent {
   parts: { text: string }[];
@@ -67,13 +67,12 @@ export class AIService {
   private static readonly GREETING_CACHE_STORAGE_KEY = 'geminiGreetingCache';
   private static readonly GREETING_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
   private static readonly DEFAULT_EMBEDDING_MODEL = 'text-embedding-004';
-  private static readonly DEFAULT_GEMINI_MODEL = 'gemini-flash-latest';
-  private static readonly HELPER_GEMINI_MODELS = ['gemini-flash-latest'];
+  private static readonly DEFAULT_GEMINI_MODEL = 'gemma-3-27b-it';
+  private static readonly HELPER_GEMINI_MODELS = ['gemma-3-27b-it'];
   private static readonly PERSONAL_API_KEYS_STORAGE_KEY = 'geminiApiKeys';
   private static readonly BACKEND_BASE_URL_STORAGE_KEY = 'backendBaseUrl';
   private static readonly PREFER_BACKEND_AI_STORAGE_KEY = 'preferBackendAi';
   private static readonly LLM_PROVIDER_STORAGE_KEY = 'llmProvider';
-  private static readonly TINYLLAMA_API_KEY_STORAGE_KEY = 'tinyllamaApiKey';
   private readonly requestTimestamps: number[] = [];
   private personalApiKeys: string[] = [];
   private readonly personalKeyRequestTimestamps: Record<string, number[]> = {};
@@ -82,8 +81,7 @@ export class AIService {
   private messages$ = new Subject<Message>();
   private backendBaseUrl = '';
   private preferBackendAi = environment.preferBackendAi !== false;
-  private llmProvider: LlmProvider = 'tinyllama';
-  private tinyllamaApiKey = '';
+  private llmProvider: LlmProvider = 'webllm';
 
   constructor(
     private http: HttpClient,
@@ -105,8 +103,7 @@ export class AIService {
       : storedPreferBackendAi === 'true';
 
     const storedProvider = localStorage.getItem(AIService.LLM_PROVIDER_STORAGE_KEY) as LlmProvider | null;
-    this.llmProvider = storedProvider === 'tinyllama' ? 'tinyllama' : 'gemini';
-    this.tinyllamaApiKey = (localStorage.getItem(AIService.TINYLLAMA_API_KEY_STORAGE_KEY) || '').trim();
+    this.llmProvider = storedProvider === 'webllm' ? 'webllm' : 'gemini';
   }
 
   setApiKey(key: string): void {
@@ -230,27 +227,10 @@ export class AIService {
     localStorage.setItem(AIService.LLM_PROVIDER_STORAGE_KEY, provider);
   }
 
-  getTinyllamaApiKey(): string {
-    return this.tinyllamaApiKey;
-  }
-
-  setTinyllamaApiKey(key: string): void {
-    this.tinyllamaApiKey = (key || '').trim();
-    if (this.tinyllamaApiKey) {
-      localStorage.setItem(AIService.TINYLLAMA_API_KEY_STORAGE_KEY, this.tinyllamaApiKey);
-    } else {
-      localStorage.removeItem(AIService.TINYLLAMA_API_KEY_STORAGE_KEY);
-    }
-  }
-
-  hasTinyllamaApiKey(): boolean {
-    return !!this.tinyllamaApiKey;
-  }
-
   /** Returns true when the currently selected provider is ready to handle requests. */
   hasActiveProviderKey(): boolean {
-    if (this.llmProvider === 'tinyllama') {
-      return this.hasTinyllamaApiKey();
+    if (this.llmProvider === 'webllm') {
+      return true; // WebLLM doesn't need API key
     }
     return this.hasApiKey();
   }
@@ -258,8 +238,8 @@ export class AIService {
   // ── Message sending ─────────────────────────────────────────────────────────
 
   async sendMessage(text: string, activeCharacterId: string, characterData: any): Promise<string> {
-    if (this.llmProvider === 'tinyllama') {
-      return this.sendMessageWithTinyLlama(text, characterData);
+    if (this.llmProvider === 'webllm') {
+      return this.sendMessageWithWebLLM(text, characterData);
     }
     return this.sendMessageWithGemini(text, activeCharacterId, characterData);
   }
@@ -290,7 +270,7 @@ export class AIService {
     }
   }
 
-  private async sendMessageWithTinyLlama(text: string, characterData: any): Promise<string> {
+  private async sendMessageWithWebLLM(text: string, characterData: any): Promise<string> {
     const systemPrompt = characterData.systemPrompt || 'You are a helpful assistant.';
 
     // Use WebLLM for browser-based inference
@@ -302,7 +282,7 @@ export class AIService {
 
       // Initialize model if not already loaded
       if (!this.webllmService.isModelLoaded()) {
-        await this.webllmService.initializeModel('phi2');
+        await this.webllmService.initializeModel('gemma3');
       }
 
       // Send message using WebLLM with optimized settings for speed
@@ -314,8 +294,8 @@ export class AIService {
 
       return response.text.substring(0, 800);  // Reduced max length for faster responses
     } catch (error: any) {
-      console.error('TinyLlama WebLLM Error:', error);
-      throw new Error(`TinyLlama error: ${error.message || 'Unknown error'}`);
+      console.error('WebLLM Error:', error);
+      throw new Error(`WebLLM error: ${error.message || 'Unknown error'}`);
     }
   }
 
@@ -407,6 +387,14 @@ export class AIService {
       return cachedGreeting;
     }
 
+    // Use the selected LLM provider for greeting generation
+    if (this.llmProvider === 'webllm') {
+      const greeting = await this.generateGreetingWithWebLLM(character, userName, recentTopics);
+      const cleanedGreeting = this.cleanGreetingText(greeting);
+      this.cacheGreeting(cacheKey, cleanedGreeting);
+      return cleanedGreeting;
+    }
+
     const primaryPrompt = this.buildGreetingPrompt(character, userName, recentTopics, false);
     const greeting = await this.generateText(primaryPrompt, {
       route: '/api/gemini/greeting',
@@ -421,6 +409,40 @@ export class AIService {
     const cleanedGreeting = this.cleanGreetingText(greeting);
     this.cacheGreeting(cacheKey, cleanedGreeting);
     return cleanedGreeting;
+  }
+
+  private async generateGreetingWithWebLLM(
+    character: Character,
+    userName: string,
+    recentTopics: string[]
+  ): Promise<string> {
+    const systemPrompt = character.systemPrompt || 'You are a helpful assistant.';
+    const greetingPrompt = this.buildGreetingPrompt(character, userName, recentTopics, false);
+
+    // Use WebLLM for browser-based inference
+    try {
+      // Check if WebGPU is supported
+      if (!this.webllmService.isWebGPUSupported()) {
+        throw new Error('WebGPU is not supported in this browser. Please use Chrome or Edge with WebGPU enabled.');
+      }
+
+      // Initialize model if not already loaded
+      if (!this.webllmService.isModelLoaded()) {
+        await this.webllmService.initializeModel('gemma3');
+      }
+
+      // Send message using WebLLM with optimized settings for greeting
+      const response = await this.webllmService.sendMessage(greetingPrompt, systemPrompt, {
+        temperature: 0.7,  // Slightly higher for more creative greetings
+        maxTokens: 128,    // Shorter for greetings
+        topP: 0.9
+      });
+
+      return response.text.substring(0, 280);  // Limit greeting length
+    } catch (error: any) {
+      console.error('WebLLM greeting generation error:', error);
+      throw new Error(`WebLLM greeting error: ${error.message || 'Unknown error'}`);
+    }
   }
 
   /**
@@ -523,6 +545,9 @@ export class AIService {
 
   private async requestBackendWithRetry<T>(route: string, body: Record<string, unknown>, maxRetries = 2): Promise<T> {
     return await this.retryWithBackoff(async () => {
+      // Add 2-second delay before calling the backend
+      await this.sleep(2000);
+
       const response = await this.http.post<T>(
         `${this.backendBaseUrl}${route}`,
         body,
@@ -553,7 +578,9 @@ export class AIService {
       for (const apiKey of personalKeys) {
         try {
           const responseText = await this.retryWithBackoff(async () => {
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent`;
+            // Add 2-second delay before calling the backend
+            await this.sleep(2000);
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent`;
             const headers = new HttpHeaders({
               'Content-Type': 'application/json',
               'X-goog-api-key': apiKey

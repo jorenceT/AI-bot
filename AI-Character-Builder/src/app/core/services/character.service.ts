@@ -9,6 +9,7 @@ export class CharacterService {
   private characters: Character[] = [];
   private activeCharacterId$ = new BehaviorSubject<string>('');
   private characters$ = new BehaviorSubject<Character[]>([]);
+  private tempCharacterName$ = new BehaviorSubject<string>('');
 
   constructor() {
     this.loadCharacters();
@@ -159,5 +160,18 @@ export class CharacterService {
 
   private generateId(): string {
     return 'char_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  }
+
+  // Methods for sharing temporary character name between components
+  setTempCharacterName(name: string): void {
+    this.tempCharacterName$.next(name);
+  }
+
+  getTempCharacterName(): Observable<string> {
+    return this.tempCharacterName$.asObservable();
+  }
+
+  getTempCharacterNameValue(): string {
+    return this.tempCharacterName$.value;
   }
 }

@@ -105,10 +105,8 @@ You should see a JSON response like:
 - First request after spin-down may take 30-60 seconds
 - Consider upgrading to a paid plan for production use
 
-### Ollama/TinyLlama
-- **Not available** in cloud deployments
-- The `/api/tinyllama/chat` endpoint will return a 503 error
-- Use Gemini endpoints instead for cloud deployment
+### Gemini
+- Use Gemini endpoints for cloud deployment
 
 ### CORS Configuration
 - Your backend already has CORS enabled (`*`)

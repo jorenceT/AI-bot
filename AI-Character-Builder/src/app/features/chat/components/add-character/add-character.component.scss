@@ -1,0 +1,259 @@
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+
+  h3 {
+    margin: 0 0 20px 0;
+    font-size: 1.5em;
+    color: #333;
+  }
+}
+
+.famous-person-card {
+  background: #f8f9fa;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+  transition: border-color 0.2s;
+
+  &.is-active {
+    border-color: #007bff;
+    background: #f0f7ff;
+  }
+}
+
+.famous-person-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+
+  input[type="checkbox"] {
+    display: none;
+  }
+}
+
+.famous-person-toggle-box {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #ccc;
+  border-radius: 4px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  position: relative;
+
+  &::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 14px;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .is-active & {
+    background: #007bff;
+    border-color: #007bff;
+
+    &::after {
+      opacity: 1;
+    }
+  }
+}
+
+.famous-person-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.famous-person-title {
+  font-weight: 600;
+  color: #333;
+}
+
+.famous-person-help {
+  font-size: 0.9em;
+  color: #666;
+  line-height: 1.4;
+}
+
+.form-row {
+  margin-bottom: 16px;
+
+  label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: #333;
+  }
+
+  input,
+  textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 1em;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+
+    &:focus {
+      outline: none;
+      border-color: #007bff;
+    }
+  }
+
+  textarea {
+    resize: vertical;
+    min-height: 80px;
+  }
+}
+
+.validation-error {
+  color: #dc3545;
+  font-size: 0.85em;
+  margin-top: 6px;
+  font-weight: 500;
+}
+
+.greetings-beta-card {
+  background: #f8f9fa;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+  transition: border-color 0.2s;
+
+  &.is-active {
+    border-color: #28a745;
+    background: #f0fff4;
+  }
+}
+
+.greetings-beta-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+
+  input[type="checkbox"] {
+    display: none;
+  }
+}
+
+.greetings-beta-toggle-box {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #ccc;
+  border-radius: 4px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  position: relative;
+
+  &::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 14px;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .is-active & {
+    background: #28a745;
+    border-color: #28a745;
+
+    &::after {
+      opacity: 1;
+    }
+  }
+}
+
+.greetings-beta-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.greetings-beta-title {
+  font-weight: 600;
+  color: #333;
+}
+
+.greetings-beta-help {
+  font-size: 0.9em;
+  color: #666;
+  line-height: 1.4;
+}
+
+.modal-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-danger {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 1em;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-primary {
+  background: #007bff;
+  color: white;
+
+  &:hover {
+    background: #0056b3;
+  }
+}
+
+.btn-secondary {
+  background: #6c757d;
+  color: white;
+
+  &:hover {
+    background: #545b62;
+  }
+}
+
+.btn-danger {
+  background: #dc3545;
+  color: white;
+
+  &:hover {
+    background: #c82333;
+  }
+}

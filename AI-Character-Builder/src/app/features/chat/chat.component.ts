@@ -1,20 +1,22 @@
 import { Component, OnInit, ChangeDetectorRef, Input, OnDestroy, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Capacitor, CapacitorHttp, registerPlugin } from '@capacitor/core';
-import { TextToSpeech } from '@capacitor-community/text-to-speech';
 import { Observable } from 'rxjs';
 import { Message, Character } from '../../core/models/ai.models';
 import { ChatService } from '../../core/services/chat.service';
 import { CharacterService } from '../../core/services/character.service';
-import { AIService, CharacterVoiceProfile, LlmProvider } from '../../core/services/ai.service';
 import { FamousPersonService } from '../../core/services/famous-person.service';
+import { TtsFactoryService, TtsProvider } from '../../core/services/tts';
+import { AiFactoryService, AiProvider, CharacterVoiceProfile } from '../../core/services/ai';
 import { WebLLMService } from '../../core/services/webllm.service';
+import { ChatWindowComponent } from './components/chat-window/chat-window.component';
+import { AddCharacterComponent } from './components/add-character/add-character.component';
+import { SetupPopupComponent } from './components/setup-popup/setup-popup.component';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+import { CapacitorHttp } from '@capacitor/core';
+import { TextToSpeech } from '@capacitor-community/text-to-speech';
 import { environment } from '../../../environments/environment';
-
-interface RuntimeVoiceProfile extends CharacterVoiceProfile {
-  updatedAt: number;
-}
+import { AIService } from '@app/core/services/ai.service';
 
 interface AndroidTtsStatus {
   available: boolean;
@@ -39,10 +41,14 @@ const AndroidTts = registerPlugin<{
   ): Promise<{ remove: () => Promise<void> }>;
 }>('AndroidTts');
 
+interface RuntimeVoiceProfile extends CharacterVoiceProfile {
+  updatedAt: number;
+}
+
 @Component({
   selector: 'app-chat',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ChatWindowComponent, AddCharacterComponent, SetupPopupComponent],
   templateUrl: './chat.component.html',
   styleUrls: ['./chat.component.scss']
 })
@@ -51,22 +57,17 @@ export class ChatComponent implements OnInit {
   private static readonly LAST_GREETING_STORAGE_KEY = 'lastChatGreetingByCharacter';
   private static readonly LAST_GREETING_FLAG_STORAGE_KEY = 'lastGreetingWasGreetingByCharacter';
   private static readonly TTS_PROVIDER_KEY = 'ttsProvider';
-  private static readonly LEGACY_PIPER_TTS_ENABLED_KEY = 'piperTtsEnabled';
-  private static readonly PIPER_TTS_ENDPOINT_KEY = 'piperTtsEndpoint';
-  private static readonly PIPER_TTS_ENDPOINT_CONFIGURED_KEY = 'piperTtsEndpointConfigured';
   private static readonly GEMINI_TTS_PROJECT_ID_KEY = 'geminiTtsProjectId';
   private static readonly GEMINI_TTS_ACCESS_TOKEN_KEY = 'geminiTtsAccessToken';
   private static readonly GEMINI_TTS_VOICE_KEY = 'geminiTtsVoice';
   private static readonly GEMINI_TTS_LOCALE_KEY = 'geminiTtsLocale';
   private static readonly GEMINI_TTS_MODEL_KEY = 'geminiTtsModel';
   private static readonly GEMINI_TTS_USE_LIVE_SERVER_KEY = 'geminiTtsUseLiveServer';
-  private static readonly LEGACY_DEFAULT_PIPER_ENDPOINT = 'http://127.0.0.1:5000/';
-  private static readonly DEFAULT_PIPER_ENDPOINT = '';
   private static readonly DEFAULT_GEMINI_TTS_VOICE = 'Kore';
   private static readonly DEFAULT_GEMINI_TTS_LOCALE = 'en-US';
   private static readonly DEFAULT_GEMINI_TTS_MODEL = 'gemini-2.5-flash-tts';
   private static readonly DEFAULT_GEMINI_LIVE_TTS_VOICE = 'Zephyr';
-  private static readonly DEFAULT_GEMINI_LIVE_TTS_MODEL = 'gemini-live-2.5-flash-preview';
+  private static readonly DEFAULT_GEMINI_LIVE_TTS_MODEL = 'gemini-2.5-flash-tts';
   @Input() userName = '';
 
   messages$: Observable<Message[]>;
@@ -89,14 +90,12 @@ export class ChatComponent implements OnInit {
   tempUseServerAi = false;
   backendBaseUrl = '';
   tempBackendBaseUrl = '';
-  ttsProvider: 'system' | 'piper' | 'gemini' | 'capacitor' = 'system';
-  tempTtsProvider: 'system' | 'piper' | 'gemini' | 'capacitor' = 'system';
-  llmProvider: LlmProvider = 'tinyllama';
-  tempLlmProvider: LlmProvider = 'tinyllama';
-  tinyllamaApiKey = '';
-  tempTinyllamaApiKey = '';
-  piperTtsEndpoint = ChatComponent.DEFAULT_PIPER_ENDPOINT;
-  tempPiperTtsEndpoint = ChatComponent.DEFAULT_PIPER_ENDPOINT;
+  ttsProvider: 'system' | 'gemini' | 'capacitor' = 'system';
+  tempTtsProvider: 'system' | 'gemini' | 'capacitor' = 'system';
+  llmProvider: AiProvider = 'webllm';
+  tempLlmProvider: AiProvider = 'webllm';
+  piperTtsEndpoint = '';
+  tempPiperTtsEndpoint = '';
   geminiTtsProjectId = '';
   tempGeminiTtsProjectId = '';
   geminiTtsAccessToken = '';
@@ -162,8 +161,8 @@ export class ChatComponent implements OnInit {
   private nativeTtsListenersReady = false;
   private suppressSpeechPlaybackError = false;
   private speechErrorResetTimeoutId: ReturnType<typeof setTimeout> | null = null;
-  private piperAudio: HTMLAudioElement | null = null;
-  private piperAudioUrl: string | null = null;
+  private audioElement: HTMLAudioElement | null = null;
+  private audioUrl: string | null = null;
   private suppressNextWelcomeMessage = false;
   private forceNextWelcomeCharacterId: string | null = null;
   lastFailedMessage: string | null = null;
@@ -208,6 +207,12 @@ export class ChatComponent implements OnInit {
       this.cdr.detectChanges();
     });
 
+    // Subscribe to temporary character name from add-character component
+    this.characterService.getTempCharacterName().subscribe(name => {
+      this.tempCharacterName = name;
+      this.cdr.detectChanges();
+    });
+
     this.checkApiKey();
     this.loadTtsSettings();
     this.loadAutoVoiceSetting();
@@ -226,7 +231,7 @@ export class ChatComponent implements OnInit {
 
   ngOnDestroy(): void {
     this.stopVoiceCapture(true);
-    this.cleanupPiperAudio();
+    this.cleanupAudio();
   }
 
   // Load persisted per-character voice selections from localStorage
@@ -260,6 +265,8 @@ export class ChatComponent implements OnInit {
   isFamousPersonCharacter = false;
   // temporary form model for add/edit
   tempCharacter: Partial<Character> = {};
+  // Temporary character name from add-character component
+  tempCharacterName = '';
 
   openAddCharacterDialog(): void {
     this.editingCharacter = null;
@@ -296,8 +303,8 @@ export class ChatComponent implements OnInit {
   }
 
   async saveCharacter(): Promise<void> {
-    // basic validation
-    const name = (this.tempCharacter.name || '').trim();
+    // basic validation - use tempCharacterName from service if available
+    const name = (this.tempCharacterName || this.tempCharacter.name || '').trim();
     if (!name) {
       this.openPopup('Please provide a character name', 'error');
       return;
@@ -404,9 +411,9 @@ export class ChatComponent implements OnInit {
   }
 
   checkApiKey(): void {
-    // TinyLlama uses local ollama via backend, no API key needed
-    if (this.aiService.getLlmProvider() === 'tinyllama') {
-      this.apiKeySet = true; // TinyLlama doesn't need API key validation
+    // WebLLM runs in browser, no API key needed
+    if (this.aiService.getLlmProvider() === 'webllm') {
+      this.apiKeySet = true; // WebLLM doesn't need API key validation
     } else {
       this.apiKeySet = this.aiService.hasApiKey();
     }
@@ -416,8 +423,6 @@ export class ChatComponent implements OnInit {
     this.tempBackendBaseUrl = this.backendBaseUrl;
     this.llmProvider = this.aiService.getLlmProvider();
     this.tempLlmProvider = this.llmProvider;
-    this.tinyllamaApiKey = this.aiService.getTinyllamaApiKey();
-    this.tempTinyllamaApiKey = this.tinyllamaApiKey;
   }
 
   private normalizeTempApiKeys(): void {
@@ -442,8 +447,8 @@ export class ChatComponent implements OnInit {
       return false;
     }
     
-    // If WebLLM (TinyLlama) is selected, always allow save (no config needed)
-    if (this.tempLlmProvider === 'tinyllama') {
+    // If WebLLM is selected, always allow save (no config needed)
+    if (this.tempLlmProvider === 'webllm') {
       return true;
     }
     
@@ -469,17 +474,8 @@ export class ChatComponent implements OnInit {
   loadTtsSettings(): void {
     try {
       const storedProvider = localStorage.getItem(ChatComponent.TTS_PROVIDER_KEY) as 'system' | 'piper' | 'gemini' | null;
-      const legacyPiperEnabled = JSON.parse(localStorage.getItem(ChatComponent.LEGACY_PIPER_TTS_ENABLED_KEY) || 'false') === true;
-      const storedPiperEndpoint = (localStorage.getItem(ChatComponent.PIPER_TTS_ENDPOINT_KEY) || '').trim();
-      const piperEndpointConfigured = localStorage.getItem(ChatComponent.PIPER_TTS_ENDPOINT_CONFIGURED_KEY) === 'true';
-      this.ttsProvider = storedProvider === 'piper'
-        ? 'system'
-        : (storedProvider || (legacyPiperEnabled ? 'system' : 'system'));
+      this.ttsProvider = 'system';
       this.tempTtsProvider = this.ttsProvider;
-      this.piperTtsEndpoint = piperEndpointConfigured
-        ? storedPiperEndpoint
-        : (storedPiperEndpoint === ChatComponent.LEGACY_DEFAULT_PIPER_ENDPOINT ? '' : storedPiperEndpoint);
-      this.tempPiperTtsEndpoint = this.piperTtsEndpoint;
       this.geminiTtsProjectId = localStorage.getItem(ChatComponent.GEMINI_TTS_PROJECT_ID_KEY) || '';
       this.tempGeminiTtsProjectId = this.geminiTtsProjectId;
       this.geminiTtsAccessToken = localStorage.getItem(ChatComponent.GEMINI_TTS_ACCESS_TOKEN_KEY) || '';
@@ -495,8 +491,6 @@ export class ChatComponent implements OnInit {
     } catch {
       this.ttsProvider = 'system';
       this.tempTtsProvider = 'system';
-      this.piperTtsEndpoint = ChatComponent.DEFAULT_PIPER_ENDPOINT;
-      this.tempPiperTtsEndpoint = ChatComponent.DEFAULT_PIPER_ENDPOINT;
       this.geminiTtsProjectId = '';
       this.tempGeminiTtsProjectId = '';
       this.geminiTtsAccessToken = '';
@@ -524,8 +518,6 @@ export class ChatComponent implements OnInit {
     }
     this.tempUseServerAi = this.useServerAi;
     this.tempBackendBaseUrl = this.backendBaseUrl;
-    this.tempTtsProvider = this.ttsProvider === 'piper' ? 'system' : this.ttsProvider;
-    this.tempPiperTtsEndpoint = this.piperTtsEndpoint;
     this.tempGeminiTtsProjectId = this.geminiTtsProjectId;
     this.tempGeminiTtsAccessToken = this.geminiTtsAccessToken;
     this.tempGeminiTtsVoice = this.geminiTtsVoice;
@@ -533,7 +525,6 @@ export class ChatComponent implements OnInit {
     this.tempGeminiTtsModel = this.geminiTtsModel;
     this.tempGeminiTtsUseLiveServer = this.geminiTtsUseLiveServer;
     this.tempLlmProvider = this.llmProvider;
-    this.tempTinyllamaApiKey = this.tinyllamaApiKey;
   }
 
   closeApiKeyDialog(): void {
@@ -548,8 +539,6 @@ export class ChatComponent implements OnInit {
     }
     this.tempUseServerAi = this.useServerAi;
     this.tempBackendBaseUrl = this.backendBaseUrl;
-    this.tempTtsProvider = this.ttsProvider === 'piper' ? 'system' : this.ttsProvider;
-    this.tempPiperTtsEndpoint = this.piperTtsEndpoint;
     this.tempGeminiTtsProjectId = this.geminiTtsProjectId;
     this.tempGeminiTtsAccessToken = this.geminiTtsAccessToken;
     this.tempGeminiTtsVoice = this.geminiTtsVoice;
@@ -557,7 +546,6 @@ export class ChatComponent implements OnInit {
     this.tempGeminiTtsModel = this.geminiTtsModel;
     this.tempGeminiTtsUseLiveServer = this.geminiTtsUseLiveServer;
     this.tempLlmProvider = this.llmProvider;
-    this.tempTinyllamaApiKey = this.tinyllamaApiKey;
   }
 
   toggleCharacterSection(): void {
@@ -577,12 +565,10 @@ export class ChatComponent implements OnInit {
       this.aiService.setPersonalApiKeys(this.tempApiKeys);
       this.aiService.setBackendConfig(this.tempBackendBaseUrl, this.tempUseServerAi);
       this.aiService.setLlmProvider(this.tempLlmProvider);
-      this.aiService.setTinyllamaApiKey(this.tempTinyllamaApiKey);
       this.useServerAi = this.aiService.isBackendAiPreferred();
       this.backendBaseUrl = this.aiService.getBackendBaseUrl();
       this.apiKeySet = this.aiService.hasApiKey();
       this.llmProvider = this.aiService.getLlmProvider();
-      this.tinyllamaApiKey = this.aiService.getTinyllamaApiKey();
       this.saveTtsSettings();
       this.closePopup();
       this.showApiKeyDialog = false;
@@ -593,7 +579,6 @@ export class ChatComponent implements OnInit {
       this.tempUseServerAi = this.useServerAi;
       this.tempBackendBaseUrl = this.backendBaseUrl;
       this.tempLlmProvider = this.llmProvider;
-      this.tempTinyllamaApiKey = this.tinyllamaApiKey;
       this.cdr.detectChanges();
 
       // Run voice-profile generation after the modal closes and only for the active character.
@@ -605,6 +590,34 @@ export class ChatComponent implements OnInit {
     }
   }
 
+  saveApiKeyFromPopup(event: {
+    apiKeys: string[];
+    useServerAi: boolean;
+    backendBaseUrl: string;
+    llmProvider: AiProvider;
+    ttsProvider: TtsProvider;
+    geminiTtsProjectId: string;
+    geminiTtsAccessToken: string;
+    geminiTtsVoice: string;
+    geminiTtsLocale: string;
+    geminiTtsModel: string;
+    geminiTtsUseLiveServer: boolean;
+  }): void {
+    this.tempApiKeys = event.apiKeys;
+    this.tempUseServerAi = event.useServerAi;
+    this.tempBackendBaseUrl = event.backendBaseUrl;
+    this.tempLlmProvider = event.llmProvider;
+    this.tempTtsProvider = event.ttsProvider;
+    this.tempGeminiTtsProjectId = event.geminiTtsProjectId;
+    this.tempGeminiTtsAccessToken = event.geminiTtsAccessToken;
+    this.tempGeminiTtsVoice = event.geminiTtsVoice;
+    this.tempGeminiTtsLocale = event.geminiTtsLocale;
+    this.tempGeminiTtsModel = event.geminiTtsModel;
+    this.tempGeminiTtsUseLiveServer = event.geminiTtsUseLiveServer;
+    
+    this.saveApiKey();
+  }
+
   clearApiKey(): void {
     this.aiService.clearApiKey();
     this.apiKeySet = this.aiService.hasApiKey();
@@ -614,8 +627,7 @@ export class ChatComponent implements OnInit {
   }
 
   private saveTtsSettings(): void {
-    this.ttsProvider = this.tempTtsProvider === 'piper' ? 'system' : this.tempTtsProvider;
-    this.piperTtsEndpoint = this.tempPiperTtsEndpoint.trim();
+    this.ttsProvider = this.tempTtsProvider;
     this.geminiTtsProjectId = this.tempGeminiTtsProjectId.trim();
     this.geminiTtsAccessToken = this.tempGeminiTtsAccessToken.trim();
     this.geminiTtsVoice = (this.tempGeminiTtsVoice || ChatComponent.DEFAULT_GEMINI_TTS_VOICE).trim();
@@ -623,8 +635,6 @@ export class ChatComponent implements OnInit {
     this.geminiTtsModel = (this.tempGeminiTtsModel || ChatComponent.DEFAULT_GEMINI_TTS_MODEL).trim();
     this.geminiTtsUseLiveServer = this.tempGeminiTtsUseLiveServer;
     localStorage.setItem(ChatComponent.TTS_PROVIDER_KEY, this.ttsProvider);
-    localStorage.setItem(ChatComponent.PIPER_TTS_ENDPOINT_KEY, this.piperTtsEndpoint);
-    localStorage.setItem(ChatComponent.PIPER_TTS_ENDPOINT_CONFIGURED_KEY, JSON.stringify(!!this.piperTtsEndpoint));
     localStorage.setItem(ChatComponent.GEMINI_TTS_PROJECT_ID_KEY, this.geminiTtsProjectId);
     localStorage.setItem(ChatComponent.GEMINI_TTS_ACCESS_TOKEN_KEY, this.geminiTtsAccessToken);
     localStorage.setItem(ChatComponent.GEMINI_TTS_VOICE_KEY, this.geminiTtsVoice);
@@ -636,8 +646,8 @@ export class ChatComponent implements OnInit {
   async sendMessage(): Promise<void> {
     if (!this.userInput.trim()) return;
     if (!this.apiKeySet) {
-      if (this.llmProvider === 'tinyllama') {
-        this.openPopup('Please configure the backend URL in Setup to use TinyLlama', 'error');
+      if (this.llmProvider === 'webllm') {
+        this.openPopup('WebLLM is ready to use - no configuration needed', 'info');
       } else {
         this.openPopup('Please enable server AI or set your Google Gemini API key first', 'error');
       }
@@ -645,18 +655,19 @@ export class ChatComponent implements OnInit {
       return;
     }
 
-    // Check if WebLLM needs to be initialized for TinyLlama
-    if (this.llmProvider === 'tinyllama' && !this.webllmService.isModelLoaded()) {
+    // Check if WebLLM needs to be initialized
+    if (this.llmProvider === 'webllm' && !this.webllmService.isModelLoaded()) {
       this.isWebLLMLoading = true;
       this.webLLMProgress = 0;
       this.webLLMLoadingText = 'Initializing WebLLM...';
-      this.loadingScreenTitle = 'Loading TinyLlama Model...';
-      this.loadingScreenSubtitle = 'Please wait while the AI model loads in your browser.';
+      this.loadingScreenTitle = 'Loading Gemma-3 AI Model...';
+      this.loadingScreenSubtitle = 'Google Gemma-3 (1B) is loading in your browser (requires WebGPU). This is a modern, efficient model!';
       this.isGreetingLoading = true;
       this.cdr.detectChanges();
 
       try {
-        await this.webllmService.initializeModel('tinyllama', (progress) => {
+        // Using Gemma-3 1B for efficient browser-based AI
+        await this.webllmService.initializeModel('gemma3', (progress) => {
           this.webLLMProgress = progress.progress;
           this.webLLMLoadingText = progress.text;
           this.loadingScreenSubtitle = progress.text;
@@ -665,7 +676,7 @@ export class ChatComponent implements OnInit {
       } catch (error: any) {
         this.isWebLLMLoading = false;
         this.isGreetingLoading = false;
-        this.openPopup(error?.message || 'Failed to load TinyLlama model', 'error');
+        this.openPopup(error?.message || 'Failed to load AI model. Gemma-3 requires WebGPU support.', 'error');
         this.cdr.detectChanges();
         return;
       } finally {
@@ -745,8 +756,8 @@ export class ChatComponent implements OnInit {
   async retryLastMessage(): Promise<void> {
     if (!this.lastFailedMessage || !this.lastFailedCharacterId) return;
     if (!this.apiKeySet) {
-      if (this.llmProvider === 'tinyllama') {
-        this.openPopup('Please configure the backend URL in Setup to use TinyLlama', 'error');
+      if (this.llmProvider === 'webllm') {
+        this.openPopup('WebLLM is ready to use - no configuration needed', 'info');
       } else {
         this.openPopup('Please enable server AI or set your Google Gemini API key first', 'error');
       }
@@ -940,20 +951,10 @@ export class ChatComponent implements OnInit {
   }
 
   async speakMessage(msg: Message): Promise<void> {
-    if (!this.autoVoiceEnabled) {
-      return;
-    }
-
     if (this.ttsProvider === 'capacitor') {
       await this.speakMessageWithCapacitorTts(msg);
       return;
     }
-
-    if (this.isPiperTtsReady()) {
-      await this.speakMessageWithPiper(msg);
-      return;
-    }
-
     await this.speakMessageWithSystemTts(msg);
   }
 
@@ -972,6 +973,11 @@ export class ChatComponent implements OnInit {
       const character = this.characters.find(c => c.id === msg.characterId);
       const speechSettings = this.getSpeechSettings(msg.characterId, character);
       
+      // Get the selected voice for this character
+      const selectedVoiceName = this.characterVoiceSelection[msg.characterId];
+      
+      // Use Capacitor TTS with character's voice and settings
+      // Note: Capacitor TTS uses device system voices, so we use pitch/rate to differentiate characters
       await TextToSpeech.speak({
         text: text,
         lang: 'en-US',
@@ -1438,7 +1444,7 @@ export class ChatComponent implements OnInit {
   }
 
   stopSpeaking(): void {
-    this.stopPiperAudio();
+    this.stopAudio();
 
     if (this.ttsProvider === 'capacitor') {
       void TextToSpeech.stop().catch(() => undefined);
@@ -1469,10 +1475,6 @@ export class ChatComponent implements OnInit {
     }, 300);
   }
 
-  private isPiperTtsReady(): boolean {
-    return !!this.piperTtsEndpoint.trim() || this.aiService.isBackendConfigured();
-  }
-
   private isGeminiTtsReady(): boolean {
     if (this.ttsProvider !== 'gemini') {
       return false;
@@ -1483,34 +1485,6 @@ export class ChatComponent implements OnInit {
     }
 
     return !!this.geminiTtsProjectId.trim() && !!this.geminiTtsAccessToken.trim();
-  }
-
-  private async speakMessageWithPiper(msg: Message): Promise<void> {
-    const text = msg.text.trim();
-    if (!text) {
-      this.openPopup('There is no message text to read aloud.', 'info');
-      return;
-    }
-
-    this.stopSpeaking();
-    this.currentSpeakingMessageId = msg.id;
-    this.cdr.detectChanges();
-
-    const restoreLoadingOverlay = this.showVoiceLoadingOverlay();
-    try {
-      const audioBlob = await this.requestPiperAudio(text);
-      await this.playAudioBlobForMessage(msg, audioBlob, 'Piper');
-    } catch (error: any) {
-      this.currentSpeakingMessageId = null;
-      this.cleanupPiperAudio();
-      this.openPopup(this.describeRemoteTtsFailure('Piper', error), 'info');
-      this.cdr.detectChanges();
-      if (this.canFallbackToSystemTts()) {
-        await this.speakMessageWithSystemTts(msg);
-      }
-    } finally {
-      restoreLoadingOverlay();
-    }
   }
 
   private showVoiceLoadingOverlay(): () => void {
@@ -1539,21 +1513,21 @@ export class ChatComponent implements OnInit {
     const audioUrl = URL.createObjectURL(audioBlob);
     const audio = new Audio(audioUrl);
 
-    this.cleanupPiperAudio();
-    this.piperAudio = audio;
-    this.piperAudioUrl = audioUrl;
+    this.cleanupAudio();
+    this.audioElement = audio;
+    this.audioUrl = audioUrl;
     this.currentSpeakingMessageId = msg.id;
     this.cdr.detectChanges();
 
     audio.onended = () => {
       this.currentSpeakingMessageId = null;
-      this.cleanupPiperAudio();
+      this.cleanupAudio();
       this.cdr.detectChanges();
     };
 
     audio.onerror = () => {
       this.currentSpeakingMessageId = null;
-      this.cleanupPiperAudio();
+      this.cleanupAudio();
       this.openPopup(`${provider} audio playback failed. Check your ${provider} setup.`, 'error');
       this.cdr.detectChanges();
     };
@@ -1577,19 +1551,19 @@ export class ChatComponent implements OnInit {
       const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
 
-      this.cleanupPiperAudio();
-      this.piperAudio = audio;
-      this.piperAudioUrl = audioUrl;
+      this.cleanupAudio();
+      this.audioElement = audio;
+      this.audioUrl = audioUrl;
 
       audio.onended = () => {
         this.currentSpeakingMessageId = null;
-        this.cleanupPiperAudio();
+        this.cleanupAudio();
         this.cdr.detectChanges();
       };
 
       audio.onerror = () => {
         this.currentSpeakingMessageId = null;
-        this.cleanupPiperAudio();
+        this.cleanupAudio();
         this.openPopup('Gemini TTS playback failed. Check your Google Cloud TTS settings.', 'error');
         this.cdr.detectChanges();
       };
@@ -1597,7 +1571,7 @@ export class ChatComponent implements OnInit {
       await audio.play();
     } catch (error: any) {
       this.currentSpeakingMessageId = null;
-      this.cleanupPiperAudio();
+      this.cleanupAudio();
       this.openPopup(this.describeRemoteTtsFailure('Gemini TTS', error), 'info');
       this.cdr.detectChanges();
       if (this.canFallbackToSystemTts()) {
@@ -1797,80 +1771,6 @@ export class ChatComponent implements OnInit {
     ].join(' ');
   }
 
-  private async requestPiperAudio(text: string): Promise<Blob> {
-    const normalizedEndpoint = this.piperTtsEndpoint.trim();
-    const backendBaseUrl = this.aiService.getBackendBaseUrl();
-
-    if (!normalizedEndpoint && backendBaseUrl) {
-      const url = `${backendBaseUrl}/api/piper/speak`;
-
-      if (Capacitor.isNativePlatform()) {
-        const response = await CapacitorHttp.request({
-          url,
-          method: 'POST',
-          headers: this.buildBackendAudioHeaders(),
-          data: { text },
-          responseType: 'arraybuffer'
-        });
-
-        if (response.status < 200 || response.status >= 300) {
-          throw new Error(`Piper request failed (${response.status})`);
-        }
-
-        const mimeType = response.headers?.['Content-Type'] || response.headers?.['content-type'] || 'audio/wav';
-        return this.base64ToBlob(String(response.data || ''), mimeType);
-      }
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: this.buildBackendAudioHeaders(),
-        body: JSON.stringify({ text })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Piper request failed (${response.status})`);
-      }
-
-      return await response.blob();
-    }
-
-    const endpoint = normalizedEndpoint;
-    if (Capacitor.isNativePlatform()) {
-      const response = await CapacitorHttp.request({
-        url: endpoint,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        data: { text },
-        responseType: 'arraybuffer'
-      });
-
-      if (response.status < 200 || response.status >= 300) {
-        throw new Error(`Piper request failed (${response.status})`);
-      }
-
-      const mimeType = response.headers?.['Content-Type'] || response.headers?.['content-type'] || 'audio/wav';
-      return this.base64ToBlob(String(response.data || ''), mimeType);
-    }
-
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ text })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || `Piper request failed (${response.status})`);
-    }
-
-    return await response.blob();
-  }
-
   private async speakMessageWithSystemTts(msg: Message): Promise<void> {
     const ttsIssue = await this.getAndroidTtsIssue();
     if (ttsIssue) {
@@ -2013,27 +1913,27 @@ export class ChatComponent implements OnInit {
     return new Blob([bytes], { type: mimeType });
   }
 
-  private stopPiperAudio(): void {
-    if (this.piperAudio) {
+  private stopAudio(): void {
+    if (this.audioElement) {
       try {
-        this.piperAudio.pause();
+        this.audioElement.pause();
       } catch {
         // ignore
       }
     }
-    this.cleanupPiperAudio();
+    this.cleanupAudio();
   }
 
-  private cleanupPiperAudio(): void {
-    if (this.piperAudio) {
-      this.piperAudio.onended = null;
-      this.piperAudio.onerror = null;
-      this.piperAudio = null;
+  private cleanupAudio(): void {
+    if (this.audioElement) {
+      this.audioElement.onended = null;
+      this.audioElement.onerror = null;
+      this.audioElement = null;
     }
 
-    if (this.piperAudioUrl) {
-      URL.revokeObjectURL(this.piperAudioUrl);
-      this.piperAudioUrl = null;
+    if (this.audioUrl) {
+      URL.revokeObjectURL(this.audioUrl);
+      this.audioUrl = null;
     }
   }
 
@@ -2294,7 +2194,8 @@ export class ChatComponent implements OnInit {
       return;
     }
 
-    if (!shouldForceGreeting && !this.aiService.hasGeminiCapacity(2, 2)) {
+    // Only check Gemini capacity if using Gemini provider
+    if (!shouldForceGreeting && this.aiService.getLlmProvider() === 'gemini' && !this.aiService.hasGeminiCapacity(2, 2)) {
       return;
     }
 
@@ -2312,18 +2213,6 @@ export class ChatComponent implements OnInit {
       }
 
       let prefetchedGreetingAudio: Blob | null = null;
-      if (this.autoVoiceEnabled && this.isPiperTtsReady()) {
-        try {
-          this.loadingScreenTitle = 'Loading voice...';
-          this.loadingScreenSubtitle = 'Waiting for the AI voice response.';
-          this.cdr.detectChanges();
-          prefetchedGreetingAudio = await this.requestPiperAudio(greetingText);
-        } catch (error: any) {
-          this.openPopup(this.describeRemoteTtsFailure('Piper', error), 'info');
-          this.cdr.detectChanges();
-        }
-      }
-
       const welcomeMessage: Message = {
         id: `welcome_${characterId}_${Date.now()}`,
         text: greetingText,

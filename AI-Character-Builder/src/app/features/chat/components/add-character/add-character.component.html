@@ -1,0 +1,75 @@
+<div class="modal-overlay">
+  <div class="modal">
+    <h3>{{ editingCharacter ? 'Edit Character' : 'Add Character' }}</h3>
+    
+    <div class="famous-person-card" [class.is-active]="isFamousPersonCharacter">
+      <label class="famous-person-toggle">
+        <input type="checkbox" [(ngModel)]="isFamousPersonCharacter" (change)="onFamousPersonToggle()" />
+        <span class="famous-person-toggle-box" aria-hidden="true"></span>
+        <span class="famous-person-copy">
+          <span class="famous-person-title">Famous person</span>
+          <span class="famous-person-help">
+            {{ isFamousPersonCharacter
+              ? "Enter only the person's name and the app will fill the rest if recognized."
+              : "Turn this on if the character is based on a real well-known person." }}
+          </span>
+        </span>
+      </label>
+    </div>
+
+    <div class="form-row">
+      <label>Name</label>
+      <input [(ngModel)]="tempCharacter.name" (input)="onNameChange()" placeholder="Character name" />
+      <div *ngIf="(tempCharacter.name || '').trim() === ''" class="validation-error">
+        Please provide a name for the character
+      </div>
+    </div>
+
+    <div *ngIf="!isFamousPersonCharacter" class="form-row">
+      <label>Personality</label>
+      <input [(ngModel)]="tempCharacter.personality" placeholder="e.g. compassionate and wise" />
+    </div>
+
+    <div *ngIf="!isFamousPersonCharacter" class="form-row">
+      <label>Tone</label>
+      <input [(ngModel)]="tempCharacter.tone" placeholder="e.g. gentle, reflective" />
+    </div>
+
+    <div *ngIf="!isFamousPersonCharacter" class="form-row">
+      <label>Backstory</label>
+      <textarea
+        [(ngModel)]="tempCharacter.backstory"
+        rows="3"
+        placeholder="Optional. Add a short history or background for this character."
+      ></textarea>
+    </div>
+
+    <div *ngIf="!isFamousPersonCharacter" class="form-row">
+      <label>System Prompt</label>
+      <textarea
+        [(ngModel)]="tempCharacter.systemPrompt"
+        rows="3"
+        placeholder="Optional. Example: Be descriptive, calm, and clear."
+      ></textarea>
+    </div>
+
+    <div class="greetings-beta-card" [class.is-active]="tempCharacter.greetingsEnabled !== false">
+      <label class="greetings-beta-toggle">
+        <input type="checkbox" [(ngModel)]="tempCharacter.greetingsEnabled" />
+        <span class="greetings-beta-toggle-box" aria-hidden="true"></span>
+        <span class="greetings-beta-copy">
+          <span class="greetings-beta-title">Greetings (beta)</span>
+          <span class="greetings-beta-help">
+            Let this bot send an automatic first greeting when it opens.
+          </span>
+        </span>
+      </label>
+    </div>
+
+    <div class="modal-buttons">
+      <button (click)="onSave()" class="btn-primary">{{ editingCharacter ? 'Save' : 'Add' }}</button>
+      <button (click)="onCancel()" class="btn-secondary">Cancel</button>
+      <button *ngIf="editingCharacter" (click)="onDelete()" class="btn-danger">Delete</button>
+    </div>
+  </div>
+</div>
