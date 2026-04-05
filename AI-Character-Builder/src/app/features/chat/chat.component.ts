@@ -231,6 +231,7 @@ export class ChatComponent implements OnInit {
 
   ngOnDestroy(): void {
     this.stopVoiceCapture(true);
+    this.stopSpeaking();
     this.cleanupAudio();
   }
 
@@ -269,6 +270,7 @@ export class ChatComponent implements OnInit {
   tempCharacterName = '';
 
   openAddCharacterDialog(): void {
+    this.stopSpeaking();
     this.editingCharacter = null;
     this.isFamousPersonCharacter = false;
     this.tempCharacter = {
@@ -286,6 +288,7 @@ export class ChatComponent implements OnInit {
   }
 
   openEditCharacterDialog(characterId: string): void {
+    this.stopSpeaking();
     const ch = this.characters.find(c => c.id === characterId);
     if (!ch) return;
     this.editingCharacter = ch;
@@ -335,19 +338,32 @@ export class ChatComponent implements OnInit {
           return;
         }
 
+        // Use persona from resolvedFigure if available (from Wikipedia)
+        const wikiPersona = resolvedFigure.persona;
         character = {
           ...character,
           name: resolvedFigure.title,
-          backstory: resolvedFigure.extract || character.backstory
+          personality: wikiPersona?.personality || '',
+          tone: wikiPersona?.tone || '',
+          backstory: wikiPersona?.backstory || resolvedFigure.extract || character.backstory,
+          systemPrompt: wikiPersona?.systemPrompt || ''
         };
 
-        const persona = await this.aiService.generateCharacterPersonaFromKnownFigure(resolvedFigure);
-        if (persona) {
-          character = {
-            ...character,
-            ...persona,
-            name: String(persona.name || resolvedFigure.title || character.name).trim() || character.name
-          };
+        // When using Gemini, call the AI to generate a full persona
+        if (this.llmProvider === 'gemini' && this.aiService.hasApiKey()) {
+          const persona = await this.aiService.generateCharacterPersonaFromKnownFigure(resolvedFigure);
+          if (persona) {
+            character = {
+              ...character,
+              ...persona,
+              name: String(persona.name || resolvedFigure.title || character.name).trim() || character.name
+            };
+          }
+        }
+
+        // Store voice preferences from Wikipedia for TTS
+        if (resolvedFigure.voiceHints) {
+          this.characterVoicePreferences[character.id] = resolvedFigure.voiceHints!;
         }
       }
 
@@ -511,6 +527,7 @@ export class ChatComponent implements OnInit {
       return;
     }
 
+    this.stopSpeaking();
     this.showApiKeyDialog = true;
     this.tempApiKeys = this.aiService.getPersonalApiKeys();
     if (!this.tempApiKeys.length) {
@@ -657,34 +674,12 @@ export class ChatComponent implements OnInit {
 
     // Check if WebLLM needs to be initialized
     if (this.llmProvider === 'webllm' && !this.webllmService.isModelLoaded()) {
-      this.isWebLLMLoading = true;
-      this.webLLMProgress = 0;
-      this.webLLMLoadingText = 'Initializing WebLLM...';
-      this.loadingScreenTitle = 'Loading Gemma-3 AI Model...';
-      this.loadingScreenSubtitle = 'Google Gemma-3 (1B) is loading in your browser (requires WebGPU). This is a modern, efficient model!';
-      this.isGreetingLoading = true;
-      this.cdr.detectChanges();
-
       try {
-        // Using Gemma-3 1B for efficient browser-based AI
-        await this.webllmService.initializeModel('gemma3', (progress) => {
-          this.webLLMProgress = progress.progress;
-          this.webLLMLoadingText = progress.text;
-          this.loadingScreenSubtitle = progress.text;
-          this.cdr.detectChanges();
-        });
+        await this.ensureWebLlmLoaded('Sending your message...', 'Downloading and caching the AI model. This may take a moment on first use.');
       } catch (error: any) {
-        this.isWebLLMLoading = false;
-        this.isGreetingLoading = false;
         this.openPopup(error?.message || 'Failed to load AI model. Gemma-3 requires WebGPU support.', 'error');
         this.cdr.detectChanges();
         return;
-      } finally {
-        this.isWebLLMLoading = false;
-        this.isGreetingLoading = false;
-        this.loadingScreenTitle = 'Connecting to AI...';
-        this.loadingScreenSubtitle = 'Please wait while your bot gets ready.';
-        this.cdr.detectChanges();
       }
     }
 
@@ -814,6 +809,7 @@ export class ChatComponent implements OnInit {
   }
 
   selectCharacter(event: Event): void {
+    this.stopSpeaking();
     const target = event.target as HTMLSelectElement | null;
     if (target) {
       const characterId = target.value;
@@ -826,6 +822,7 @@ export class ChatComponent implements OnInit {
       return;
     }
 
+    this.stopSpeaking();
     this.characterService.setActiveCharacter(characterId);
   }
 
@@ -951,6 +948,10 @@ export class ChatComponent implements OnInit {
   }
 
   async speakMessage(msg: Message): Promise<void> {
+    if (this.ttsProvider === 'gemini') {
+      await this.speakMessageWithGeminiTts(msg);
+      return;
+    }
     if (this.ttsProvider === 'capacitor') {
       await this.speakMessageWithCapacitorTts(msg);
       return;
@@ -973,19 +974,26 @@ export class ChatComponent implements OnInit {
       const character = this.characters.find(c => c.id === msg.characterId);
       const speechSettings = this.getSpeechSettings(msg.characterId, character);
       
-      // Get the selected voice for this character
-      const selectedVoiceName = this.characterVoiceSelection[msg.characterId];
+      // Get the best matching voice for this character
+      const characterVoice = this.getVoiceForCharacter(msg.characterId);
       
-      // Use Capacitor TTS with character's voice and settings
-      // Note: Capacitor TTS uses device system voices, so we use pitch/rate to differentiate characters
-      await TextToSpeech.speak({
+      // Build Capacitor TTS options with proper voice selection
+      const speakOptions: any = {
         text: text,
-        lang: 'en-US',
+        lang: characterVoice?.lang || 'en-US',
         rate: speechSettings.rate,
         pitch: speechSettings.pitch,
         volume: speechSettings.volume,
         category: 'playback'
-      });
+      };
+
+      // Pass the voice name to Capacitor TTS if available
+      if (characterVoice?.name) {
+        speakOptions.voice = characterVoice.name;
+      }
+
+      // Use Capacitor TTS with character's voice and settings
+      await TextToSpeech.speak(speakOptions);
 
       this.currentSpeakingMessageId = null;
       this.cdr.detectChanges();
@@ -1171,7 +1179,8 @@ export class ChatComponent implements OnInit {
   }
 
   private async ensureVoiceProfile(characterId: string): Promise<void> {
-    if (!this.aiService.hasApiKey() || !this.voices.length || this.pendingVoiceProfileIds.has(characterId)) {
+    // Skip AI voice profiles entirely when using WebLLM or without voices
+    if (this.llmProvider !== 'gemini' || !this.aiService.hasApiKey() || !this.voices.length || this.pendingVoiceProfileIds.has(characterId)) {
       return;
     }
 
@@ -1547,7 +1556,12 @@ export class ChatComponent implements OnInit {
     this.cdr.detectChanges();
 
     try {
-      const audioBlob = await this.requestGeminiTtsAudio(text, msg.characterId);
+      // Get character voice for Gemini TTS voice selection
+      const characterVoice = this.getVoiceForCharacter(msg.characterId);
+      const voiceForGemini = characterVoice?.name || this.geminiTtsVoice;
+      const localeForGemini = characterVoice?.lang || this.geminiTtsLocale;
+
+      const audioBlob = await this.requestGeminiTtsAudio(text, msg.characterId, voiceForGemini, localeForGemini);
       const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
 
@@ -1601,12 +1615,16 @@ export class ChatComponent implements OnInit {
     return !this.isNativeAndroid() && this.canUseSpeechSynthesis();
   }
 
-  private async requestGeminiTtsAudio(text: string, characterId: string): Promise<Blob> {
+  private async requestGeminiTtsAudio(text: string, characterId: string, voice?: string, locale?: string): Promise<Blob> {
     const character = this.characters.find(item => item.id === characterId);
     const tonePrompt = this.buildGeminiTtsPrompt(character);
 
+    // Use provided voice/locale or fall back to defaults
+    const selectedVoice = voice || this.geminiTtsVoice;
+    const selectedLocale = locale || this.geminiTtsLocale;
+
     if (this.geminiTtsUseLiveServer) {
-      return await this.requestGeminiLiveTtsAudio(text, tonePrompt);
+      return await this.requestGeminiLiveTtsAudio(text, tonePrompt, selectedVoice);
     }
 
     const url = 'https://texttospeech.googleapis.com/v1/text:synthesize';
@@ -1616,8 +1634,8 @@ export class ChatComponent implements OnInit {
         text
       },
       voice: {
-        languageCode: this.geminiTtsLocale,
-        name: this.geminiTtsVoice,
+        languageCode: selectedLocale,
+        name: selectedVoice,
         modelName: this.geminiTtsModel
       },
       audioConfig: {
@@ -1664,17 +1682,19 @@ export class ChatComponent implements OnInit {
     return this.base64ToBlob(String(body?.audioContent || ''), 'audio/mpeg');
   }
 
-  private async requestGeminiLiveTtsAudio(text: string, stylePrompt: string): Promise<Blob> {
+  private async requestGeminiLiveTtsAudio(text: string, stylePrompt: string, voice?: string): Promise<Blob> {
     const backendBaseUrl = this.aiService.getBackendBaseUrl();
     if (!backendBaseUrl) {
       throw new Error('No backend server is configured for Gemini live voice.');
     }
 
+    const selectedVoice = voice || this.geminiTtsVoice || ChatComponent.DEFAULT_GEMINI_LIVE_TTS_VOICE;
+
     const url = `${backendBaseUrl}/api/gemini/live-tts`;
     const payload = {
       text,
       stylePrompt,
-      voiceName: (this.geminiTtsVoice || ChatComponent.DEFAULT_GEMINI_LIVE_TTS_VOICE).trim() || ChatComponent.DEFAULT_GEMINI_LIVE_TTS_VOICE,
+      voiceName: selectedVoice,
       model: (this.geminiTtsModel || ChatComponent.DEFAULT_GEMINI_LIVE_TTS_MODEL).trim() || ChatComponent.DEFAULT_GEMINI_LIVE_TTS_MODEL
     };
 
@@ -2199,10 +2219,23 @@ export class ChatComponent implements OnInit {
       return;
     }
 
-    this.loadingScreenTitle = 'Connecting to AI...';
-    this.loadingScreenSubtitle = 'Thinking about the greeting...';
-    this.isGreetingLoading = true;
-    this.cdr.detectChanges();
+    // Only show greeting loading screen for Gemini provider
+    if (this.aiService.getLlmProvider() === 'gemini') {
+      this.loadingScreenTitle = 'Connecting to AI...';
+      this.loadingScreenSubtitle = 'Thinking about the greeting...';
+      this.isGreetingLoading = true;
+      this.cdr.detectChanges();
+    }
+
+    if (this.aiService.getLlmProvider() === 'webllm' && !this.webllmService.isModelLoaded()) {
+      try {
+        await this.ensureWebLlmLoaded('Preparing greeting...', 'Downloading and caching the AI model for the greeting. This may take a moment on first use.');
+      } catch (error: any) {
+        console.warn('Could not initialize WebLLM for greeting', error);
+        this.openPopup(error?.message || 'Failed to load AI model for the greeting.', 'error');
+        return;
+      }
+    }
 
     try {
       this.forceNextWelcomeCharacterId = null;
@@ -2281,6 +2314,31 @@ export class ChatComponent implements OnInit {
         'info'
       );
       return null;
+    }
+  }
+
+  private async ensureWebLlmLoaded(title: string, subtitle: string): Promise<void> {
+    this.isWebLLMLoading = true;
+    this.webLLMProgress = 0;
+    this.webLLMLoadingText = 'Loading AI model into cache...';
+    this.loadingScreenTitle = title;
+    this.loadingScreenSubtitle = subtitle;
+    this.isGreetingLoading = true;
+    this.cdr.detectChanges();
+
+    try {
+      await this.webllmService.initializeModel('gemma3', (progress) => {
+        this.webLLMProgress = progress.progress;
+        this.webLLMLoadingText = progress.text;
+        this.loadingScreenSubtitle = progress.text;
+        this.cdr.detectChanges();
+      });
+    } finally {
+      this.isWebLLMLoading = false;
+      this.isGreetingLoading = false;
+      this.loadingScreenTitle = 'Connecting to AI...';
+      this.loadingScreenSubtitle = 'Please wait while your bot gets ready.';
+      this.cdr.detectChanges();
     }
   }
 

@@ -5,5 +5,8 @@ export const environment = {
   backendBaseUrl: 'http://localhost:8787',
   backendAppId: '',
   backendAppSecret: '',
-  preferBackendAi: true
+  preferBackendAi: true,
+  webllmLocalModelId: 'gemma-2-2b-it-q4f16_1-MLC',
+  webllmLocalModelPath: 'assets/models/gemma2/2b/resolve/main',
+  webllmLocalModelLibPath: 'assets/models/gemma2/2b/gemma-2-2b-it-q4f16_1-ctx4k_cs1k-webgpu.wasm'
 };

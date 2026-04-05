@@ -580,7 +580,7 @@ export class AIService {
           const responseText = await this.retryWithBackoff(async () => {
             // Add 2-second delay before calling the backend
             await this.sleep(2000);
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent`;
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
             const headers = new HttpHeaders({
               'Content-Type': 'application/json',
               'X-goog-api-key': apiKey

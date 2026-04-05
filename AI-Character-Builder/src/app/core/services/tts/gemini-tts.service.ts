@@ -31,7 +31,11 @@ export class GeminiTtsService implements TtsService {
       throw new Error('Gemini TTS not configured');
     }
 
-    const audioBlob = await this.requestAudio(options.text);
+    // Allow voice override from options, otherwise use config voice
+    const voiceOverride = options.voice || this.config.voice;
+    const localeOverride = options.lang || this.config.locale;
+
+    const audioBlob = await this.requestAudio(options.text, voiceOverride, localeOverride);
     const audioUrl = URL.createObjectURL(audioBlob);
     const audio = new Audio(audioUrl);
 
@@ -70,19 +74,19 @@ export class GeminiTtsService implements TtsService {
     return 'gemini';
   }
 
-  private async requestAudio(text: string): Promise<Blob> {
+  private async requestAudio(text: string, voice?: string, locale?: string): Promise<Blob> {
     if (!this.config) {
       throw new Error('Gemini TTS not configured');
     }
 
     if (this.config.useLiveServer) {
-      return this.requestLiveServerAudio(text);
+      return this.requestLiveServerAudio(text, voice);
     }
 
-    return this.requestDirectApiAudio(text);
+    return this.requestDirectApiAudio(text, voice, locale);
   }
 
-  private async requestDirectApiAudio(text: string): Promise<Blob> {
+  private async requestDirectApiAudio(text: string, voice?: string, locale?: string): Promise<Blob> {
     if (!this.config) {
       throw new Error('Gemini TTS not configured');
     }
@@ -91,8 +95,8 @@ export class GeminiTtsService implements TtsService {
     const requestBody = {
       input: { text },
       voice: {
-        languageCode: this.config.locale,
-        name: this.config.voice,
+        languageCode: locale || this.config.locale,
+        name: voice || this.config.voice,
         modelName: this.config.model
       },
       audioConfig: { audioEncoding: 'MP3' }
@@ -137,7 +141,7 @@ export class GeminiTtsService implements TtsService {
     return this.base64ToBlob(String(body?.audioContent || ''), 'audio/mpeg');
   }
 
-  private async requestLiveServerAudio(text: string): Promise<Blob> {
+  private async requestLiveServerAudio(text: string, voice?: string): Promise<Blob> {
     if (!this.config?.backendBaseUrl) {
       throw new Error('No backend server configured for Gemini live voice');
     }
@@ -145,7 +149,7 @@ export class GeminiTtsService implements TtsService {
     const url = `${this.config.backendBaseUrl}/api/gemini/live-tts`;
     const payload = {
       text,
-      voiceName: this.config.voice,
+      voiceName: voice || this.config.voice,
       model: this.config.model
     };
 

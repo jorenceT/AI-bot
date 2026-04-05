@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import * as webllm from '@mlc-ai/web-llm';
+import { environment } from '../../../environments/environment';
 
 export interface WebLLMProgress {
   progress: number;
@@ -36,6 +37,7 @@ export class WebLLMService {
     'gemma3': 'gemma-2-2b-it-q4f16_1-MLC',
     'llama': 'Llama-3.2-1B-Instruct-q4f16_1-MLC'
   };
+  private readonly localModelRecord: webllm.ModelRecord | null = this.buildLocalModelRecord();
 
   constructor() {}
 
@@ -85,9 +87,11 @@ export class WebLLMService {
 
     try {
       const startTime = Date.now();
+      const engineConfig = this.buildEngineConfig(modelId);
 
       // Create engine with progress callback
       this.engine = await webllm.CreateMLCEngine(modelId, {
+        ...engineConfig,
         initProgressCallback: (report: webllm.InitProgressReport) => {
           const progress = Math.round((report.progress || 0) * 100);
           this.loadingProgress = progress;
@@ -284,6 +288,49 @@ export class WebLLMService {
 
     const candidates = preferredFallbacks[modelKey] || [];
     return candidates.find(modelId => this.supportedModelIds.has(modelId)) || null;
+  }
+
+  private buildEngineConfig(modelId: string): webllm.MLCEngineConfig {
+    if (this.localModelRecord && this.localModelRecord.model_id === modelId) {
+      return {
+        appConfig: {
+          model_list: [this.localModelRecord],
+          useIndexedDBCache: true
+        }
+      };
+    }
+
+    return {};
+  }
+
+  private buildLocalModelRecord(): webllm.ModelRecord | null {
+    const modelId = String((environment as any)?.webllmLocalModelId || '').trim();
+    const modelPath = String((environment as any)?.webllmLocalModelPath || '').trim();
+    const modelLibPath = String((environment as any)?.webllmLocalModelLibPath || '').trim();
+
+    if (!modelId || !modelPath || !modelLibPath) {
+      return null;
+    }
+
+    return {
+      model: this.resolveAssetUrl(modelPath),
+      model_id: modelId,
+      model_lib: this.resolveAssetUrl(modelLibPath),
+      model_type: webllm.ModelType.LLM
+    };
+  }
+
+  private resolveAssetUrl(path: string): string {
+    const normalizedPath = String(path || '').trim();
+    if (!normalizedPath) {
+      return normalizedPath;
+    }
+
+    try {
+      return new URL(normalizedPath, document.baseURI).toString();
+    } catch {
+      return normalizedPath;
+    }
   }
 
   /**

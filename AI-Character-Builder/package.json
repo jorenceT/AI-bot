@@ -8,6 +8,7 @@
     "start": "ng serve",
     "backend:start": "node backend/server.mjs",
     "backend:dev": "node --watch backend/server.mjs",
+    "download:webllm:gemma2:2b": "powershell -ExecutionPolicy Bypass -File scripts/download-webllm-gemma2-2b.ps1",
     "build": "ng build",
     "build:mobile": "ng build --configuration development --delete-output-path=false",
     "watch": "ng build --watch --configuration development",

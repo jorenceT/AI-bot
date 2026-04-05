@@ -8,7 +8,7 @@
       <p>
         {{ isPinConfigured
           ? 'Enter your PIN to open the character builder.'
-          : 'Create a 4 to 6 digit PIN to lock the app on phones and desktop browsers.' }}
+          : 'Create a 4 to 6 digit PIN to lock the app on phones' }}
       </p>
 
       <div class="pin-form" *ngIf="!isPinConfigured; else unlockForm">

@@ -87,3 +87,6 @@ Thumbs.db
 # misc
 *.orig
 *.rej
+
+# ai models build from script
+/src/assets/models/gemma2

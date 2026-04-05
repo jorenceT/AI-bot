@@ -5,6 +5,9 @@ https://www.geeksforgeeks.org/artificial-intelligence/how-to-access-huggingface-
 Gemma-3 1B is better than phi-2?
 gemma-3-27b-it -> for google chat instead of gemini-2.5-flash-lite
 gemini-2.5-flash-lite -> in tts change it
+speaker mute button not working
+
+make local chat bot fastewr by loading the llm into ram with a time of loading.
 
 reduce the promt to "imagin you are {name} from {football or show name etc} and {respond to the message to me}".
 for local bot use all existing messages.
