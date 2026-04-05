@@ -54,6 +54,7 @@ interface RuntimeVoiceProfile extends CharacterVoiceProfile {
 })
 export class ChatComponent implements OnInit {
   private static readonly GREETING_COOLDOWN_MS = 60 * 60 * 1000;
+  private static readonly GREETING_LOADING_MIN_VISIBLE_MS = 250;
   private static readonly LAST_GREETING_STORAGE_KEY = 'lastChatGreetingByCharacter';
   private static readonly LAST_GREETING_FLAG_STORAGE_KEY = 'lastGreetingWasGreetingByCharacter';
   private static readonly TTS_PROVIDER_KEY = 'ttsProvider';
@@ -2219,25 +2220,28 @@ export class ChatComponent implements OnInit {
       return;
     }
 
-    // Only show greeting loading screen for Gemini provider
-    if (this.aiService.getLlmProvider() === 'gemini') {
-      this.loadingScreenTitle = 'Connecting to AI...';
-      this.loadingScreenSubtitle = 'Thinking about the greeting...';
-      this.isGreetingLoading = true;
-      this.cdr.detectChanges();
-    }
-
-    if (this.aiService.getLlmProvider() === 'webllm' && !this.webllmService.isModelLoaded()) {
-      try {
-        await this.ensureWebLlmLoaded('Preparing greeting...', 'Downloading and caching the AI model for the greeting. This may take a moment on first use.');
-      } catch (error: any) {
-        console.warn('Could not initialize WebLLM for greeting', error);
-        this.openPopup(error?.message || 'Failed to load AI model for the greeting.', 'error');
-        return;
-      }
-    }
+    this.loadingScreenTitle = 'Connecting to AI...';
+    this.loadingScreenSubtitle = 'Thinking about the greeting...';
+    this.isGreetingLoading = true;
+    this.cdr.detectChanges();
+    const greetingLoadingStartedAt = Date.now();
 
     try {
+      await this.yieldToBrowser();
+
+      if (this.aiService.getLlmProvider() === 'webllm' && !this.webllmService.isModelLoaded()) {
+        try {
+          await this.ensureWebLlmLoaded(
+            'Preparing greeting...',
+            'Downloading and caching the AI model for the greeting. This may take a moment on first use.'
+          );
+        } catch (error: any) {
+          console.warn('Could not initialize WebLLM for greeting', error);
+          this.openPopup(error?.message || 'Failed to load AI model for the greeting.', 'error');
+          return;
+        }
+      }
+
       this.forceNextWelcomeCharacterId = null;
       await this.enrichCharacterIfNeeded(characterId);
       const greetingText = await this.generateGreetingWithGemini(characterId);
@@ -2268,6 +2272,10 @@ export class ChatComponent implements OnInit {
         }
       }
     } finally {
+      const greetingLoadingElapsed = Date.now() - greetingLoadingStartedAt;
+      if (greetingLoadingElapsed < ChatComponent.GREETING_LOADING_MIN_VISIBLE_MS) {
+        await this.sleep(ChatComponent.GREETING_LOADING_MIN_VISIBLE_MS - greetingLoadingElapsed);
+      }
       this.isGreetingLoading = false;
       this.loadingScreenTitle = 'Connecting to AI...';
       this.loadingScreenSubtitle = 'Please wait while your bot gets ready.';
@@ -2340,6 +2348,18 @@ export class ChatComponent implements OnInit {
       this.loadingScreenSubtitle = 'Please wait while your bot gets ready.';
       this.cdr.detectChanges();
     }
+  }
+
+  private async yieldToBrowser(): Promise<void> {
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    if (ms <= 0) {
+      return;
+    }
+
+    await new Promise<void>(resolve => setTimeout(resolve, ms));
   }
 
   private async enrichCharacterIfNeeded(characterId: string): Promise<void> {

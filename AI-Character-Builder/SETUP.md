@@ -174,6 +174,10 @@ this.characters = [
 - Subsequent requests are faster
 - Keep prompts concise for better performance
 - Use simpler models if responses are too slow
+- If you self-host large model shards (`params_shard_*.bin`), enable HTTP/2 or HTTP/3 plus Brotli on your CDN/server
+- Serve shard files with long-lived immutable cache headers (for example `Cache-Control: public, max-age=31536000, immutable`)
+- Keep shard files on the same origin as your app when possible, or add preconnect hints for the model CDN
+- Avoid re-downloading by keeping filenames content-hashed and only changing them when model files actually change
 
 ## Security Notes
 
