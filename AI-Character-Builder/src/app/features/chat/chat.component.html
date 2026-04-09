@@ -131,13 +131,16 @@
           <p>{{ msg.text }}</p>
           <small class="timestamp">{{ msg.timestamp | date:'short' }}</small>
         </ng-template>
-        <button *ngIf="currentSpeakingMessageId !== msg.id && msg.sender === 'ai'" (click)="speakMessage(msg)" class="btn-speak" title="Read aloud" aria-label="Read aloud">
+        <button *ngIf="currentSpeakingMessageId !== msg.id && ttsLoadingMessageId !== msg.id && msg.sender === 'ai'" (click)="speakMessage(msg)" class="btn-speak" title="Read aloud" aria-label="Read aloud">
           <svg class="message-audio-icon" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M3 10v4h4l5 4V6L7 10H3z"></path>
             <path d="M16 8a6 6 0 0 1 0 8"></path>
             <path d="M18.5 5.5a9.5 9.5 0 0 1 0 13"></path>
           </svg>
         </button>
+        <span *ngIf="ttsLoadingMessageId === msg.id" class="tts-loading-spinner" aria-live="polite" aria-label="Loading voice">
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        </span>
         <button *ngIf="currentSpeakingMessageId === msg.id" (click)="stopSpeaking()" class="btn-stop" title="Stop speaking" aria-label="Stop speaking">
           <span class="stop-square" aria-hidden="true"></span>
         </button>

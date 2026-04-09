@@ -12,6 +12,10 @@ export class TtsFactoryService {
     return this.geminiTts.speak(options);
   }
 
+  async generateAudioBlob(options: TtsOptions): Promise<Blob> {
+    return this.geminiTts.generateAudioBlob(options);
+  }
+
   async stop(): Promise<void> {
     return this.geminiTts.stop();
   }

@@ -13,7 +13,23 @@ export interface GeminiTtsConfig {
   providedIn: 'root'
 })
 export class GeminiTtsService implements TtsService {
+  private static readonly ALLOWED_VOICES = new Set([
+    'Puck',
+    'Enceladus',
+    'Kore',
+    'Zephyr',
+    'Aoede',
+    'Fenrir',
+    'Achernar',
+    'Schedar',
+    'Zubenelgenubi',
+    'Charon',
+    'Leda',
+    'Gacrux',
+    'Iapetus'
+  ]);
   private config: GeminiTtsConfig | null = null;
+  private currentAudio: HTMLAudioElement | null = null;
 
   constructor(private http: HttpClient) {}
 
@@ -26,22 +42,28 @@ export class GeminiTtsService implements TtsService {
       throw new Error('Gemini TTS not configured');
     }
 
-    // Allow voice override from options, otherwise use config voice
-    const voiceOverride = options?.voice || this.config?.voice;
-    const localeOverride = options?.lang || this.config?.locale;
-
-    const audioBlob = await this.requestAudio(options.text, voiceOverride, localeOverride);
+    const audioBlob = await this.generateAudioBlob(options);
     const audioUrl = URL.createObjectURL(audioBlob);
     const audio = new Audio(audioUrl);
+    this.currentAudio = audio;
 
     return new Promise((resolve, reject) => {
+      audio.onplay = () => {
+        options.onStart?.();
+      };
       audio.onended = () => {
         URL.revokeObjectURL(audioUrl);
+        if (this.currentAudio === audio) {
+          this.currentAudio = null;
+        }
         resolve();
       };
 
       audio.onerror = () => {
         URL.revokeObjectURL(audioUrl);
+        if (this.currentAudio === audio) {
+          this.currentAudio = null;
+        }
         reject(new Error('Audio playback failed'));
       };
 
@@ -50,7 +72,15 @@ export class GeminiTtsService implements TtsService {
   }
 
   async stop(): Promise<void> {
-    // Audio playback is handled by the browser, no explicit stop needed
+    if (this.currentAudio) {
+      try {
+        this.currentAudio.pause();
+        this.currentAudio.currentTime = 0;
+      } catch {
+        // ignore
+      }
+      this.currentAudio = null;
+    }
   }
 
   async isAvailable(): Promise<boolean> {
@@ -59,6 +89,16 @@ export class GeminiTtsService implements TtsService {
 
   getName(): string {
     return 'gemini';
+  }
+
+  async generateAudioBlob(options: TtsOptions): Promise<Blob> {
+    if (!this.config?.apiKey) {
+      throw new Error('Gemini TTS not configured');
+    }
+
+    const voiceOverride = this.normalizeVoiceName(options?.voice || this.config?.voice);
+    const localeOverride = options?.lang || this.config?.locale;
+    return this.requestAudio(options.text, voiceOverride, localeOverride);
   }
 
   private async requestAudio(text: string, voice?: string, locale?: string): Promise<Blob> {
@@ -94,7 +134,7 @@ export class GeminiTtsService implements TtsService {
         speechConfig: {
           voiceConfig: {
             prebuiltVoiceConfig: {
-              voiceName: voice || this.config.voice
+              voiceName: this.normalizeVoiceName(voice || this.config.voice)
             }
           }
         }
@@ -164,5 +204,18 @@ export class GeminiTtsService implements TtsService {
 
     new Uint8Array(buffer, 44).set(pcm);
     return new Blob([buffer], { type: 'audio/wav' });
+  }
+
+  private normalizeVoiceName(voice?: string): string {
+    const candidate = String(voice || '').trim();
+    if (!candidate) {
+      return this.config?.voice || 'Kore';
+    }
+
+    const exactMatch = Array.from(GeminiTtsService.ALLOWED_VOICES).find(
+      allowed => allowed.toLowerCase() === candidate.toLowerCase()
+    );
+
+    return exactMatch || (this.config?.voice && GeminiTtsService.ALLOWED_VOICES.has(this.config.voice) ? this.config.voice : 'Kore');
   }
 }

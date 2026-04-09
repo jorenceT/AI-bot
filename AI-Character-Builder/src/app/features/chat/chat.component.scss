@@ -1266,6 +1266,38 @@
   }
 }
 
+.tts-loading-spinner {
+  width: 2rem;
+  height: 2rem;
+  display: inline-block;
+  position: relative;
+  margin-top: 0.5rem;
+}
+
+.tts-loading-spinner span {
+  position: absolute;
+  width: 0.36rem;
+  height: 0.36rem;
+  background: rgba(59, 65, 75, 0.88);
+  border-radius: 50%;
+  transform-origin: 1rem 1rem;
+  animation: ttsSpinnerFade 1.2s linear infinite;
+}
+
+.tts-loading-spinner span:nth-child(1) { transform: rotate(0deg) translateX(0.72rem); animation-delay: 0s; }
+.tts-loading-spinner span:nth-child(2) { transform: rotate(45deg) translateX(0.72rem); animation-delay: -0.15s; }
+.tts-loading-spinner span:nth-child(3) { transform: rotate(90deg) translateX(0.72rem); animation-delay: -0.3s; }
+.tts-loading-spinner span:nth-child(4) { transform: rotate(135deg) translateX(0.72rem); animation-delay: -0.45s; }
+.tts-loading-spinner span:nth-child(5) { transform: rotate(180deg) translateX(0.72rem); animation-delay: -0.6s; }
+.tts-loading-spinner span:nth-child(6) { transform: rotate(225deg) translateX(0.72rem); animation-delay: -0.75s; }
+.tts-loading-spinner span:nth-child(7) { transform: rotate(270deg) translateX(0.72rem); animation-delay: -0.9s; }
+.tts-loading-spinner span:nth-child(8) { transform: rotate(315deg) translateX(0.72rem); animation-delay: -1.05s; }
+
+@keyframes ttsSpinnerFade {
+  0% { opacity: 1; }
+  100% { opacity: 0.2; }
+}
+
 .message-audio-icon {
   width: 1rem;
   height: 1rem;

@@ -56,6 +56,21 @@ export class ChatComponent implements OnInit {
   private static readonly DEFAULT_GEMINI_TTS_VOICE = 'Kore';
   private static readonly DEFAULT_GEMINI_TTS_LOCALE = 'en-US';
   private static readonly DEFAULT_GEMINI_TTS_MODEL = 'gemini-2.5-flash-preview-tts';
+  private static readonly GEMINI_ALLOWED_VOICES = new Set([
+    'Puck',
+    'Enceladus',
+    'Kore',
+    'Zephyr',
+    'Aoede',
+    'Fenrir',
+    'Achernar',
+    'Schedar',
+    'Zubenelgenubi',
+    'Charon',
+    'Leda',
+    'Gacrux',
+    'Iapetus'
+  ]);
   @Input() userName = '';
 
   messages$: Observable<Message[]>;
@@ -88,6 +103,7 @@ export class ChatComponent implements OnInit {
   isCharacterSectionCollapsed = false;
   autoVoiceEnabled = true; // whether AI responses should be spoken automatically
   currentSpeakingMessageId: string | null = null; // id of the message currently being spoken
+  ttsLoadingMessageId: string | null = null; // id of the message currently loading audio from Gemini
   voices: SpeechSynthesisVoice[] = [];
   preferredVoice: SpeechSynthesisVoice | null = null;
   aiVoiceProfiles: Record<string, RuntimeVoiceProfile> = {};
@@ -135,6 +151,7 @@ export class ChatComponent implements OnInit {
   private speechErrorResetTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private audioElement: HTMLAudioElement | null = null;
   private audioUrl: string | null = null;
+  private messageAudioCache = new Map<string, Blob>();
   private suppressNextWelcomeMessage = false;
   private forceNextWelcomeCharacterId: string | null = null;
   lastFailedMessage: string | null = null;
@@ -1335,27 +1352,56 @@ export class ChatComponent implements OnInit {
     }
 
     this.stopSpeaking();
-    this.currentSpeakingMessageId = msg.id;
+
+    const cachedBlob = this.messageAudioCache.get(msg.id);
+    if (cachedBlob) {
+      this.ttsLoadingMessageId = null;
+      this.cdr.detectChanges();
+      try {
+        await this.playAudioBlobForMessage(msg, cachedBlob, 'Gemini TTS');
+      } catch (error: any) {
+        this.currentSpeakingMessageId = null;
+        this.cleanupAudio();
+        this.openPopup(this.describeRemoteTtsFailure('Gemini TTS', error), 'error');
+        this.cdr.detectChanges();
+      }
+      return;
+    }
+
+    this.ttsLoadingMessageId = msg.id;
     this.cdr.detectChanges();
 
     try {
       const voiceForGemini = this.resolveGeminiVoiceName(msg.characterId);
       const localeForGemini = this.resolveGeminiLocale(msg.characterId);
 
-      await this.ttsFactory.speak({
+      const audioBlob = await this.ttsFactory.generateAudioBlob({
         text,
         lang: localeForGemini || this.geminiTtsLocale,
         voice: voiceForGemini || this.geminiTtsVoice
       });
 
-      this.currentSpeakingMessageId = null;
-      this.cdr.detectChanges();
+      this.messageAudioCache.set(msg.id, audioBlob);
+      this.ttsLoadingMessageId = null;
+      await this.playAudioBlobForMessage(msg, audioBlob, 'Gemini TTS');
     } catch (error: any) {
+      this.ttsLoadingMessageId = null;
       this.currentSpeakingMessageId = null;
       this.cleanupAudio();
       this.openPopup(this.describeRemoteTtsFailure('Gemini TTS', error), 'error');
       this.cdr.detectChanges();
     }
+  }
+
+  private async playCachedMessageAudio(msg: Message): Promise<void> {
+    const cachedBlob = this.messageAudioCache.get(msg.id);
+    if (!cachedBlob) {
+      await this.speakMessageWithGeminiTts(msg);
+      return;
+    }
+
+    this.stopSpeaking();
+    await this.playAudioBlobForMessage(msg, cachedBlob, 'Gemini TTS');
   }
 
   private describeRemoteTtsFailure(provider: string, error: unknown): string {
@@ -1379,7 +1425,14 @@ export class ChatComponent implements OnInit {
   private resolveGeminiVoiceName(characterId: string): string | null {
     const profile = this.aiVoiceProfiles[characterId];
     const hint = profile?.voiceHints?.map(value => String(value || '').trim()).find(Boolean);
-    return hint || null;
+    if (!hint) {
+      return null;
+    }
+
+    const exactMatch = Array.from(ChatComponent.GEMINI_ALLOWED_VOICES).find(
+      voice => voice.toLowerCase() === hint.toLowerCase()
+    );
+    return exactMatch || null;
   }
 
   private resolveGeminiLocale(characterId: string): string | null {
