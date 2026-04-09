@@ -1,73 +1,19 @@
 <div *ngIf="showApiKeyDialog" class="modal-overlay">
   <div class="modal">
     <h3>Setup</h3>
-    <p>Set a Google Gemini API key for personal mode, or leave it blank if this app is configured to use your backend quota.</p>
-    <p class="hint">Get a free key at <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com/app/apikey</a>. If you add your own Gemini keys here, they stay on your device for your own use and Gemini requests will go directly from your app instead of being sent to our backend.</p>
-    
-    <div class="llm-provider-section">
-      <label>AI Model Provider</label>
-      <div class="llm-provider-toggle">
-        <button
-          type="button"
-          class="llm-provider-btn"
-          [class.is-active]="tempLlmProvider === 'gemini'"
-          (click)="tempLlmProvider = 'gemini'"
-        >
-          <span class="llm-provider-name">Gemini</span>
-          <span class="llm-provider-desc">Google's powerful AI</span>
-        </button>
-        <button
-          type="button"
-          class="llm-provider-btn"
-          [class.is-active]="tempLlmProvider === 'webllm'"
-          (click)="tempLlmProvider = 'webllm'"
-        >
-          <span class="llm-provider-name">WebLLM</span>
-          <span class="llm-provider-desc">Browser-based AI (no server needed)</span>
-        </button>
-      </div>
-    </div>
+    <p>Gemini is the only AI model and Google TTS is the only speech engine.</p>
+    <p class="hint">Add your Gemini API key below. The app uses that key for both chat and TTS.</p>
+    <p class="hint">
+      Get a free key at
+      <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">aistudio.google.com/app/apikey</a>.
+    </p>
 
-    <div class="llm-provider-section">
-      <label>Text-to-Speech Provider</label>
-      <div class="llm-provider-toggle">
-        <button
-          type="button"
-          class="llm-provider-btn"
-          [class.is-active]="tempTtsProvider === 'system'"
-          (click)="tempTtsProvider = 'system'"
-        >
-          <span class="llm-provider-name">System</span>
-          <span class="llm-provider-desc">Browser/device TTS</span>
-        </button>
-        <button
-          type="button"
-          class="llm-provider-btn"
-          [class.is-active]="tempTtsProvider === 'capacitor'"
-          (click)="tempTtsProvider = 'capacitor'"
-        >
-          <span class="llm-provider-name">Capacitor</span>
-          <span class="llm-provider-desc">Native mobile TTS</span>
-        </button>
-        <button
-          type="button"
-          class="llm-provider-btn"
-          disabled
-          title="Google Cloud TTS - Under Development"
-          style="opacity:0.5;cursor:not-allowed"
-        >
-          <span class="llm-provider-name">Gemini</span>
-          <span class="llm-provider-desc">🚧 Under Development</span>
-        </button>
-      </div>
-    </div>
-
-    <div class="api-keys-section" *ngIf="tempLlmProvider === 'gemini'">
+    <div class="api-keys-section">
       <div class="api-keys-header">
         <label>Personal Gemini Keys</label>
         <button type="button" class="btn-add-key" (click)="onAddApiKeyField()" aria-label="Add Gemini key">+</button>
       </div>
-      <p class="hint">Add more personal keys to support more requests per minute (RPM), One free key can support 15 RPM Only above that need to create a new free key deleting the old one.</p>
+      <p class="hint">Add more personal keys to support more requests per minute. The first key is used automatically.</p>
       <div class="api-key-row" *ngFor="let apiKey of tempApiKeys; let keyIndex = index">
         <input
           type="text"
@@ -85,13 +31,6 @@
           Remove
         </button>
       </div>
-    </div>
-
-    <div class="api-keys-section" *ngIf="tempLlmProvider === 'webllm'">
-      <div class="api-keys-header">
-        <label>WebLLM (Browser-based)</label>
-      </div>
-      <p class="hint">WebLLM runs entirely in your browser using WebGPU. No server configuration needed. The AI model will be downloaded on first use (~500MB).</p>
     </div>
 
     <div class="modal-buttons">

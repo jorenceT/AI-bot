@@ -1,17 +1,12 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Capacitor, CapacitorHttp } from '@capacitor/core';
+import { HttpClient } from '@angular/common/http';
 import { TtsService, TtsOptions } from './tts.interface';
-import { environment } from '../../../../environments/environment';
 
 export interface GeminiTtsConfig {
-  projectId: string;
-  accessToken: string;
+  apiKey: string;
   voice: string;
   locale: string;
   model: string;
-  useLiveServer: boolean;
-  backendBaseUrl?: string;
 }
 
 @Injectable({
@@ -27,13 +22,13 @@ export class GeminiTtsService implements TtsService {
   }
 
   async speak(options: TtsOptions): Promise<void> {
-    if (!this.config) {
+    if (!this.config?.apiKey) {
       throw new Error('Gemini TTS not configured');
     }
 
     // Allow voice override from options, otherwise use config voice
-    const voiceOverride = options.voice || this.config.voice;
-    const localeOverride = options.lang || this.config.locale;
+    const voiceOverride = options?.voice || this.config?.voice;
+    const localeOverride = options?.lang || this.config?.locale;
 
     const audioBlob = await this.requestAudio(options.text, voiceOverride, localeOverride);
     const audioUrl = URL.createObjectURL(audioBlob);
@@ -59,15 +54,7 @@ export class GeminiTtsService implements TtsService {
   }
 
   async isAvailable(): Promise<boolean> {
-    if (!this.config) {
-      return false;
-    }
-
-    if (this.config.useLiveServer) {
-      return !!this.config.backendBaseUrl;
-    }
-
-    return !!this.config.projectId && !!this.config.accessToken;
+    return !!this.config?.apiKey;
   }
 
   getName(): string {
@@ -78,11 +65,6 @@ export class GeminiTtsService implements TtsService {
     if (!this.config) {
       throw new Error('Gemini TTS not configured');
     }
-
-    if (this.config.useLiveServer) {
-      return this.requestLiveServerAudio(text, voice);
-    }
-
     return this.requestDirectApiAudio(text, voice, locale);
   }
 
@@ -91,43 +73,39 @@ export class GeminiTtsService implements TtsService {
       throw new Error('Gemini TTS not configured');
     }
 
-    const url = 'https://texttospeech.googleapis.com/v1/text:synthesize';
+    const model = this.config.model || 'gemini-2.5-flash-preview-tts';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
     const requestBody = {
-      input: { text },
-      voice: {
-        languageCode: locale || this.config.locale,
-        name: voice || this.config.voice,
-        modelName: this.config.model
-      },
-      audioConfig: { audioEncoding: 'MP3' }
-    };
-
-    if (Capacitor.isNativePlatform()) {
-      const response = await CapacitorHttp.request({
-        url,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.accessToken}`,
-          'x-goog-user-project': this.config.projectId
-        },
-        data: requestBody,
-        responseType: 'json'
-      });
-
-      if (response.status < 200 || response.status >= 300) {
-        throw new Error(`Gemini TTS request failed (${response.status})`);
+      contents: [
+        {
+          parts: [
+            {
+              text: [
+                `Speak this text naturally using the voice ${voice || this.config.voice}.`,
+                `Use locale ${locale || this.config.locale}.`,
+                `Text: ${text}`
+              ].join(' ')
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        responseModalities: ['AUDIO'],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: {
+              voiceName: voice || this.config.voice
+            }
+          }
+        }
       }
-
-      return this.base64ToBlob(String(response.data?.audioContent || ''), 'audio/mpeg');
-    }
+    };
 
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.config.accessToken}`,
-        'x-goog-user-project': this.config.projectId
+        'x-goog-api-key': this.config.apiKey
       },
       body: JSON.stringify(requestBody)
     });
@@ -138,65 +116,15 @@ export class GeminiTtsService implements TtsService {
     }
 
     const body = await response.json();
-    return this.base64ToBlob(String(body?.audioContent || ''), 'audio/mpeg');
+    const audioPart = body?.candidates?.[0]?.content?.parts?.find((part: any) => part?.inlineData?.data || part?.inline_data?.data);
+    const inlineData = audioPart?.inlineData?.data || audioPart?.inline_data?.data || body?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!inlineData) {
+      throw new Error('Gemini TTS returned no audio data');
+    }
+    return this.pcmToWavBlob(this.base64ToBytes(String(inlineData)));
   }
 
-  private async requestLiveServerAudio(text: string, voice?: string): Promise<Blob> {
-    if (!this.config?.backendBaseUrl) {
-      throw new Error('No backend server configured for Gemini live voice');
-    }
-
-    const url = `${this.config.backendBaseUrl}/api/gemini/live-tts`;
-    const payload = {
-      text,
-      voiceName: voice || this.config.voice,
-      model: this.config.model
-    };
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
-    };
-
-    if (environment.backendAppId) {
-      headers['X-App-Id'] = environment.backendAppId;
-    }
-
-    if (environment.backendAppSecret) {
-      headers['X-App-Secret'] = environment.backendAppSecret;
-    }
-
-    if (Capacitor.isNativePlatform()) {
-      const response = await CapacitorHttp.request({
-        url,
-        method: 'POST',
-        headers,
-        data: payload,
-        responseType: 'arraybuffer'
-      });
-
-      if (response.status < 200 || response.status >= 300) {
-        throw new Error(`Gemini live TTS request failed (${response.status})`);
-      }
-
-      const mimeType = response.headers?.['Content-Type'] || response.headers?.['content-type'] || 'audio/wav';
-      return this.base64ToBlob(String(response.data || ''), mimeType);
-    }
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || `Gemini live TTS request failed (${response.status})`);
-    }
-
-    return await response.blob();
-  }
-
-  private base64ToBlob(base64: string, mimeType: string): Blob {
+  private base64ToBytes(base64: string): Uint8Array {
     const normalized = base64.includes(',') ? base64.split(',').pop() || '' : base64;
     const binary = atob(normalized);
     const bytes = new Uint8Array(binary.length);
@@ -205,6 +133,36 @@ export class GeminiTtsService implements TtsService {
       bytes[index] = binary.charCodeAt(index);
     }
 
-    return new Blob([bytes], { type: mimeType });
+    return bytes;
+  }
+
+  private pcmToWavBlob(pcm: Uint8Array, sampleRate = 24000, numChannels = 1, bitsPerSample = 16): Blob {
+    const blockAlign = (numChannels * bitsPerSample) / 8;
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = pcm.byteLength;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+    const writeString = (offset: number, value: string) => {
+      for (let i = 0; i < value.length; i++) {
+        view.setUint8(offset + i, value.charCodeAt(i));
+      }
+    };
+
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitsPerSample, true);
+    writeString(36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    new Uint8Array(buffer, 44).set(pcm);
+    return new Blob([buffer], { type: 'audio/wav' });
   }
 }

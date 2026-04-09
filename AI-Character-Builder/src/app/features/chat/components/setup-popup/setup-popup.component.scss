@@ -49,55 +49,6 @@
   }
 }
 
-.llm-provider-section {
-  margin-bottom: 24px;
-
-  label {
-    display: block;
-    margin-bottom: 12px;
-    font-weight: 600;
-    color: #333;
-  }
-}
-
-.llm-provider-toggle {
-  display: flex;
-  gap: 12px;
-}
-
-.llm-provider-btn {
-  flex: 1;
-  padding: 16px;
-  border: 2px solid #e9ecef;
-  border-radius: 8px;
-  background: white;
-  cursor: pointer;
-  transition: all 0.2s;
-  text-align: left;
-
-  &:hover {
-    border-color: #007bff;
-  }
-
-  &.is-active {
-    border-color: #007bff;
-    background: #f0f7ff;
-  }
-}
-
-.llm-provider-name {
-  display: block;
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 4px;
-}
-
-.llm-provider-desc {
-  display: block;
-  font-size: 0.85em;
-  color: #666;
-}
-
 .api-keys-section {
   margin-bottom: 24px;
 }

@@ -6,17 +6,10 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
-    "backend:start": "node backend/server.mjs",
-    "backend:dev": "node --watch backend/server.mjs",
-    "download:webllm:gemma2:2b": "powershell -ExecutionPolicy Bypass -File scripts/download-webllm-gemma2-2b.ps1",
     "build": "ng build",
     "build:mobile": "ng build --configuration development --delete-output-path=false",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test",
-    "cap:sync": "node scripts/pre-cap-sync.cjs && npx cap sync android",
-    "android": "npx cap open android",
-    "android:prepare": "npm run build:mobile && npm run cap:sync",
-    "android:apk": "npm run android:prepare && cd android && gradlew.bat assembleDebug"
+    "test": "ng test"
   },
   "private": true,
   "dependencies": {
@@ -29,14 +22,6 @@
     "@angular/platform-browser": "^17.0.0",
     "@angular/platform-browser-dynamic": "^17.0.0",
     "@angular/router": "^17.0.0",
-    "@capacitor-community/text-to-speech": "^8.0.0",
-    "@capacitor/android": "^8.2.0",
-    "@capacitor/cli": "^8.2.0",
-    "@capacitor/core": "^8.2.0",
-    "@mlc-ai/web-llm": "^0.2.82",
-    "@mlc-ai/web-runtime": "^0.24.0-dev2",
-    "@mlc-ai/web-tokenizers": "^0.1.6",
-    "@mlc-ai/web-xgrammar": "^0.1.27",
     "@types/chrome": "^0.1.38",
     "rxjs": "^7.8.0",
     "tslib": "^2.6.0",
