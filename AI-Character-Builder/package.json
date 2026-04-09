@@ -8,6 +8,10 @@
     "start": "ng serve",
     "build": "ng build",
     "build:mobile": "ng build --configuration development --delete-output-path=false",
+    "build:apk": "ng build --configuration production && npx cap sync android",
+    "cap:sync": "npx cap sync android",
+    "cap:open": "npx cap open android",
+    "cap:run": "npx cap run android",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
   },
