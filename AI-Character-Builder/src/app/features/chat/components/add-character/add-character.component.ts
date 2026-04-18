@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Character } from '../../../../core/models/ai.models';
 import { CharacterService } from '../../../../core/services/character.service';
+import { GEMINI_VOICE_CATALOG, GeminiVoiceCatalogItem } from '../../../../core/models/gemini-voice-catalog';
 
 @Component({
   selector: 'app-add-character',
@@ -12,6 +13,8 @@ import { CharacterService } from '../../../../core/services/character.service';
   styleUrls: ['./add-character.component.scss']
 })
 export class AddCharacterComponent implements OnInit {
+  readonly geminiVoiceOptions: GeminiVoiceCatalogItem[] = GEMINI_VOICE_CATALOG;
+
   @Input() editingCharacter: Character | null = null;
   @Input() isFamousPersonCharacter = false;
   
@@ -37,7 +40,11 @@ export class AddCharacterComponent implements OnInit {
       this.tempCharacter = {
         ...this.editingCharacter,
         greetingsEnabled: this.editingCharacter.greetingsEnabled !== false,
-        voice: this.editingCharacter.voice || ''
+        shortAnswers: !!this.editingCharacter.shortAnswers,
+        voice: this.editingCharacter.voice || '',
+        ttsVoiceName: this.editingCharacter.ttsVoiceName || '',
+        ttsLanguageCode: this.editingCharacter.ttsLanguageCode || '',
+        ttsPitch: typeof this.editingCharacter.ttsPitch === 'number' ? this.editingCharacter.ttsPitch : null
       };
     } else {
       this.tempCharacter = {
@@ -48,8 +55,12 @@ export class AddCharacterComponent implements OnInit {
         backstory: '',
         systemPrompt: '',
         greetingsEnabled: true,
+        shortAnswers: false,
         isActive: false,
-        voice: ''
+        voice: '',
+        ttsVoiceName: '',
+        ttsLanguageCode: '',
+        ttsPitch: null
       };
     }
   }
@@ -68,8 +79,12 @@ export class AddCharacterComponent implements OnInit {
       backstory: this.isFamousPersonCharacter ? '' : (this.tempCharacter.backstory || ''),
       systemPrompt: this.isFamousPersonCharacter ? '' : (this.tempCharacter.systemPrompt || ''),
       greetingsEnabled: this.tempCharacter.greetingsEnabled !== false,
+      shortAnswers: !!this.tempCharacter.shortAnswers,
       isActive: !!this.tempCharacter.isActive,
-      voice: this.tempCharacter.voice || ''
+      voice: this.tempCharacter.voice || '',
+      ttsVoiceName: this.tempCharacter.ttsVoiceName || '',
+      ttsLanguageCode: this.tempCharacter.ttsLanguageCode || '',
+      ttsPitch: typeof this.tempCharacter.ttsPitch === 'number' ? this.tempCharacter.ttsPitch : null
     };
 
     this.save.emit(character);
@@ -91,5 +106,23 @@ export class AddCharacterComponent implements OnInit {
 
   onNameChange(): void {
     this.characterService.setTempCharacterName(this.tempCharacter.name || '');
+  }
+
+  onPitchChange(value: string | number): void {
+    const pitch = Number(value);
+    this.tempCharacter.ttsPitch = Number.isFinite(pitch) ? pitch : null;
+  }
+
+  get hasCustomPitch(): boolean {
+    const pitch = this.tempCharacter.ttsPitch;
+    return typeof pitch === 'number' && Number.isFinite(pitch);
+  }
+
+  get hasVoiceSettings(): boolean {
+    return !!this.tempCharacter.ttsVoiceName || !!this.tempCharacter.ttsLanguageCode || this.hasCustomPitch;
+  }
+
+  get pitchSliderValue(): number {
+    return this.hasCustomPitch ? (this.tempCharacter.ttsPitch as number) : 1;
   }
 }

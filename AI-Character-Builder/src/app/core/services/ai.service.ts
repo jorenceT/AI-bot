@@ -4,32 +4,15 @@ import { Observable, Subject } from 'rxjs';
 import { Character, Message } from '../models/ai.models';
 import { environment } from '../../../environments/environment';
 
-export interface CharacterVoiceProfile {
-  voiceHints: string[];
-  langHints: string[];
-  rate: number;
+export interface GeminiVoiceSelection {
+  voiceName: string;
+  gender: 'male' | 'female' | 'neutral';
   pitch: number;
-  volume: number;
+  style: string;
 }
 
 interface BackendTextResponse {
   text?: string;
-  error?: string;
-}
-
-interface VoiceCatalogItem {
-  name: string;
-  lang: string;
-  default: boolean;
-}
-
-interface BackendVoiceProfileResponse {
-  profile?: CharacterVoiceProfile | null;
-  error?: string;
-}
-
-interface BackendCharacterPersonaResponse {
-  persona?: Partial<Character> | null;
   error?: string;
 }
 
@@ -104,7 +87,10 @@ export class AIService {
 
   async sendMessage(text: string, activeCharacterId: string, characterData: any): Promise<string> {
     const systemPrompt = characterData?.systemPrompt || 'You are a helpful assistant.';
-    const fullPrompt = `${systemPrompt}\n\nUser: ${text}`;
+    const shortAnswerInstruction = characterData?.shortAnswers
+      ? 'Give a short response. Keep it brief, direct, and conversational. Use 1 to 3 short sentences max. Do not mention or repeat these instructions.'
+      : '';
+    const fullPrompt = [systemPrompt, shortAnswerInstruction, `User: ${text}`].filter(Boolean).join('\n\n');
     const response = await this.generateText(fullPrompt, AIService.DEFAULT_GEMINI_MODEL);
     return String(response || '').slice(0, 1000);
   }
@@ -115,6 +101,7 @@ export class AIService {
       'Sound like the character, not a generic assistant.',
       'No AI mention. No markdown. No quotes.',
       'Keep it natural and under 45 words.',
+      character.shortAnswers ? 'Give a short response. Keep it brief, direct, and conversational. Use 1 to 3 short sentences max. Do not mention or repeat these instructions.' : '',
       `User: ${userName || 'friend'}`,
       `Character: ${character?.name || 'not provided'}`,
       `Tone: ${this.limitText(character?.tone || 'warm', 90)}`,
@@ -156,50 +143,56 @@ export class AIService {
     return this.generateCharacterPersona(figure);
   }
 
-  async generateCharacterVoiceProfile(character: Character, availableVoices: SpeechSynthesisVoice[] | VoiceCatalogItem[]): Promise<CharacterVoiceProfile | null> {
+  async generateGeminiVoiceSelection(
+    character: Character,
+    availableVoices: Array<{ name: string; style?: string }>
+  ): Promise<GeminiVoiceSelection | null> {
     try {
-      const voiceCatalog = availableVoices.slice(0, 50).map(voice => ({
-        name: voice.name,
-        lang: voice.lang,
-        default: voice.default
-      }));
+      const voiceCatalog = availableVoices.slice(0, 50);
       const prompt = [
-        'You are helping choose the most natural browser speech synthesis voice for a roleplay character.',
-        'Given the character and available browser voices, return only strict JSON with this shape:',
-        '{"voiceHints":["..."],"langHints":["..."],"rate":1.0,"pitch":1.0,"volume":1.0}',
+        'You are selecting the best Google Gemini TTS prebuilt voice for a character.',
+        'Return strict JSON only with this shape:',
+        '{"voiceName":"Kore","gender":"female","pitch":1.0,"style":"gravelly, terse, analytical"}',
         'Rules:',
-        '- voiceHints: 2 to 6 short substrings to match against voice names, most important first.',
-        '- langHints: 1 to 3 language hints such as "en-US" or "en-GB".',
-        '- rate must be between 0.85 and 1.12 for natural speech.',
-        '- pitch must be between 0.85 and 1.18 for natural speech.',
-        '- volume must be between 0.9 and 1.0.',
-        '- Prefer warm, natural, human-sounding voices over robotic ones.',
-        '- Use the available voice list to influence voiceHints.',
+        '- voiceName must be one of the supported voices in the catalog.',
+        '- gender must be male, female, or neutral.',
+        '- pitch must be between 0.90 and 1.06 for natural speech.',
+        '- style should be a short human-readable voice style summary.',
+        '- Infer the speaking gender from the persona, tone, and public portrayal.',
+        '- Use the catalog voice names and styles only; do not invent new names.',
+        '- Favor the voice that best matches the character persona and tone.',
+        '- For famous figures, infer the likely speaking gender and vocal style from the persona details.',
+        '- Choose a voice that sounds right for the character, not just a random default.',
+        '- Do not return a browser TTS voice name like "Google UK English Male". Only return a Gemini prebuilt voice name from the catalog.',
+        '- When the character reads as stern, gravelly, authoritative, direct, intense, or masculine, prefer a male voice from the catalog.',
+        '- When the character reads as soft, bright, gentle, warm, or feminine, prefer a female voice from the catalog.',
+        '- If the character is strongly masculine in persona, never fall back to a female voice unless no male option is available.',
+        '- If the voice catalog includes style hints, use them to choose the closest emotional fit.',
         '',
         `Character name: ${character.name}`,
         `Personality: ${character.personality || 'not provided'}`,
         `Tone: ${character.tone || 'not provided'}`,
         `Backstory: ${character.backstory || 'not provided'}`,
         `System prompt: ${character.systemPrompt || 'not provided'}`,
-        `Available voices: ${JSON.stringify(voiceCatalog)}`
+        `Supported Gemini voices: ${JSON.stringify(voiceCatalog)}`
       ].join('\n');
       const responseText = await this.generateText(prompt, AIService.DEFAULT_HELPER_MODEL);
       const parsed = this.extractJsonObject(responseText);
-      return parsed ? {
-        voiceHints: Array.isArray(parsed.voiceHints) ? parsed.voiceHints.slice(0, 6).map((item: unknown) => String(item)) : [],
-        langHints: Array.isArray(parsed.langHints) ? parsed.langHints.slice(0, 3).map((item: unknown) => String(item)) : [],
-        rate: this.clampNumber(parsed.rate, 0.85, 1.12, 1),
-        pitch: this.clampNumber(parsed.pitch, 0.85, 1.18, 1),
-        volume: this.clampNumber(parsed.volume, 0.9, 1, 1)
-      } : null;
+      const voiceName = String(parsed?.voiceName || '').trim();
+      if (!voiceName) {
+        return null;
+      }
+
+      return {
+        voiceName,
+        gender: this.normalizeVoiceGender(parsed?.gender),
+        pitch: this.clampNumber(parsed?.pitch, 0.9, 1.06, 1),
+        style: String(parsed?.style || '').trim()
+      };
     } catch (error) {
-      console.warn('Failed to generate character voice profile', error);
+      console.warn('Failed to generate Gemini voice selection', error);
       return null;
     }
-  }
-
-  async generateCharacterVoiceProfileFromKnownFigure(character: Character, availableVoices: SpeechSynthesisVoice[] | VoiceCatalogItem[]): Promise<CharacterVoiceProfile | null> {
-    return this.generateCharacterVoiceProfile(character, availableVoices);
   }
 
   getGeminiRateLimitStatus(): { used: number; remaining: number; retryAfterSeconds: number } {
@@ -278,6 +271,14 @@ export class AIService {
       return Math.min(max, Math.max(min, parsed));
     }
     return fallback;
+  }
+
+  private normalizeVoiceGender(value: unknown): 'male' | 'female' | 'neutral' {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (normalized === 'male' || normalized === 'female' || normalized === 'neutral') {
+      return normalized;
+    }
+    return 'neutral';
   }
 
   private getActiveApiKey(): string {

@@ -6,12 +6,13 @@ import { Message, Character } from '../../core/models/ai.models';
 import { ChatService } from '../../core/services/chat.service';
 import { CharacterService } from '../../core/services/character.service';
 import { TtsFactoryService } from '../../core/services/tts';
-import { AiFactoryService, AiProvider, CharacterVoiceProfile } from '../../core/services/ai';
+import { AiFactoryService, AiProvider } from '../../core/services/ai';
 import { ChatWindowComponent } from './components/chat-window/chat-window.component';
 import { AddCharacterComponent } from './components/add-character/add-character.component';
 import { SetupPopupComponent } from './components/setup-popup/setup-popup.component';
 import { Capacitor, registerPlugin } from '@capacitor/core';
-import { AIService } from '@app/core/services/ai.service';
+import { AIService, GeminiVoiceSelection } from '@app/core/services/ai.service';
+import { GEMINI_ALLOWED_VOICES, GEMINI_VOICE_CATALOG } from '../../core/models/gemini-voice-catalog';
 
 interface AndroidTtsStatus {
   available: boolean;
@@ -36,10 +37,6 @@ const AndroidTts = registerPlugin<{
   ): Promise<{ remove: () => Promise<void> }>;
 }>('AndroidTts');
 
-interface RuntimeVoiceProfile extends CharacterVoiceProfile {
-  updatedAt: number;
-}
-
 @Component({
   selector: 'app-chat',
   standalone: true,
@@ -56,21 +53,9 @@ export class ChatComponent implements OnInit {
   private static readonly DEFAULT_GEMINI_TTS_VOICE = 'Kore';
   private static readonly DEFAULT_GEMINI_TTS_LOCALE = 'en-US';
   private static readonly DEFAULT_GEMINI_TTS_MODEL = 'gemini-2.5-flash-preview-tts';
-  private static readonly GEMINI_ALLOWED_VOICES = new Set([
-    'Puck',
-    'Enceladus',
-    'Kore',
-    'Zephyr',
-    'Aoede',
-    'Fenrir',
-    'Achernar',
-    'Schedar',
-    'Zubenelgenubi',
-    'Charon',
-    'Leda',
-    'Gacrux',
-    'Iapetus'
-  ]);
+  private static readonly GEMINI_VOICE_OVERRIDES: Record<string, string> = {
+    Gacrux: 'Alnilam'
+  };
   @Input() userName = '';
 
   messages$: Observable<Message[]>;
@@ -106,8 +91,6 @@ export class ChatComponent implements OnInit {
   ttsLoadingMessageId: string | null = null; // id of the message currently loading audio from Gemini
   voices: SpeechSynthesisVoice[] = [];
   preferredVoice: SpeechSynthesisVoice | null = null;
-  aiVoiceProfiles: Record<string, RuntimeVoiceProfile> = {};
-  pendingVoiceProfileIds = new Set<string>();
   // Per-character voice preference substrings (searched in voice.name or voice.lang)
   characterVoicePreferences: Record<string, string[]> = {
     // calmer, lower voice
@@ -183,7 +166,6 @@ export class ChatComponent implements OnInit {
 
     this.characters$.subscribe(chars => {
       this.characters = chars;
-      this.refreshVoiceProfiles();
       this.cdr.detectChanges();
     });
 
@@ -206,7 +188,6 @@ export class ChatComponent implements OnInit {
     this.loadAutoVoiceSetting();
     this.loadVoices();
     this.loadVoiceSelections();
-    this.loadVoiceProfiles();
     this.setupSpeechRecognition();
 
     if (!this.apiKeySet) {
@@ -236,18 +217,6 @@ export class ChatComponent implements OnInit {
     }
   }
 
-  loadVoiceProfiles(): void {
-    try {
-      const raw = localStorage.getItem('characterAiVoiceProfiles');
-      if (raw) {
-        this.aiVoiceProfiles = JSON.parse(raw) || {};
-      }
-    } catch (e) {
-      console.warn('Could not load AI voice profiles', e);
-      this.aiVoiceProfiles = {};
-    }
-  }
-
   // Character add/edit dialog state
   showCharacterDialog = false;
   editingCharacter: Character | null = null;
@@ -270,7 +239,10 @@ export class ChatComponent implements OnInit {
       systemPrompt: '',
       greetingsEnabled: true,
       isActive: false,
-      voice: ''
+      voice: '',
+      ttsVoiceName: '',
+      ttsLanguageCode: '',
+      ttsPitch: null
     };
     this.showCharacterDialog = true;
   }
@@ -282,7 +254,14 @@ export class ChatComponent implements OnInit {
     this.editingCharacter = ch;
     this.isFamousPersonCharacter = false;
     // clone
-    this.tempCharacter = { ...ch, greetingsEnabled: ch.greetingsEnabled !== false, voice: ch.voice || '' };
+    this.tempCharacter = {
+      ...ch,
+      greetingsEnabled: ch.greetingsEnabled !== false,
+      voice: ch.voice || '',
+      ttsVoiceName: ch.ttsVoiceName || '',
+      ttsLanguageCode: ch.ttsLanguageCode || '',
+      ttsPitch: typeof ch.ttsPitch === 'number' ? ch.ttsPitch : null
+    };
     this.showCharacterDialog = true;
   }
 
@@ -293,24 +272,28 @@ export class ChatComponent implements OnInit {
     this.editingCharacter = null;
   }
 
-  async saveCharacter(): Promise<void> {
+  async saveCharacter(characterInput?: Partial<Character>): Promise<void> {
     // basic validation - use tempCharacterName from service if available
-    const name = (this.tempCharacterName || this.tempCharacter.name || '').trim();
+    const source = characterInput || this.tempCharacter;
+    const name = (this.tempCharacterName || source.name || '').trim();
     if (!name) {
       this.openPopup('Please provide a character name', 'error');
       return;
     }
 
     let character: Character = {
-      id: this.editingCharacter ? this.editingCharacter.id : (this.tempCharacter.id && this.tempCharacter.id.trim()) || ('char_' + Date.now()),
+      id: this.editingCharacter ? this.editingCharacter.id : (source.id && String(source.id).trim()) || ('char_' + Date.now()),
       name: name,
-      personality: this.isFamousPersonCharacter ? '' : (this.tempCharacter.personality || ''),
-      tone: this.isFamousPersonCharacter ? '' : (this.tempCharacter.tone || ''),
-      backstory: this.isFamousPersonCharacter ? '' : (this.tempCharacter.backstory || ''),
-      systemPrompt: this.isFamousPersonCharacter ? '' : (this.tempCharacter.systemPrompt || ''),
-      greetingsEnabled: this.tempCharacter.greetingsEnabled !== false,
-      isActive: !!this.tempCharacter.isActive,
-      voice: this.tempCharacter.voice || ''
+      personality: this.isFamousPersonCharacter ? '' : (source.personality || ''),
+      tone: this.isFamousPersonCharacter ? '' : (source.tone || ''),
+      backstory: this.isFamousPersonCharacter ? '' : (source.backstory || ''),
+      systemPrompt: this.isFamousPersonCharacter ? '' : (source.systemPrompt || ''),
+      greetingsEnabled: source.greetingsEnabled !== false,
+      isActive: !!source.isActive,
+      voice: source.voice || '',
+      ttsVoiceName: source.ttsVoiceName || '',
+      ttsLanguageCode: source.ttsLanguageCode || '',
+      ttsPitch: typeof source.ttsPitch === 'number' ? source.ttsPitch : null
     };
 
     try {
@@ -333,6 +316,21 @@ export class ChatComponent implements OnInit {
             name: String(persona.name || character.name).trim() || character.name
           };
         }
+        if (!String(character.ttsVoiceName || '').trim()) {
+        const geminiVoiceSelection = await this.aiService.generateGeminiVoiceSelection(
+          character,
+          GEMINI_VOICE_CATALOG
+        );
+
+          const resolvedGeminiVoice = this.resolveGeminiVoiceSelection(geminiVoiceSelection);
+          if (resolvedGeminiVoice) {
+            character.ttsVoiceName = resolvedGeminiVoice;
+          }
+
+          if (!Number.isFinite(Number(character.ttsPitch))) {
+            character.ttsPitch = this.resolveGeminiPitch(geminiVoiceSelection);
+          }
+        }
       }
 
       if (this.editingCharacter) {
@@ -348,8 +346,6 @@ export class ChatComponent implements OnInit {
         delete this.characterVoiceSelection[character.id];
       }
       this.saveVoiceSelection(character.id);
-      delete this.aiVoiceProfiles[character.id];
-      this.saveVoiceProfiles();
 
       this.closeCharacterDialog();
     } finally {
@@ -368,8 +364,6 @@ export class ChatComponent implements OnInit {
     this.characterService.deleteCharacter(characterId);
     delete this.characterVoiceSelection[characterId];
     this.saveVoiceSelection(characterId);
-    delete this.aiVoiceProfiles[characterId];
-    this.saveVoiceProfiles();
     this.closeCharacterDialog();
   }
 
@@ -383,14 +377,6 @@ export class ChatComponent implements OnInit {
       }
     } catch (e) {
       console.warn('Could not save character voice selection', e);
-    }
-  }
-
-  saveVoiceProfiles(): void {
-    try {
-      localStorage.setItem('characterAiVoiceProfiles', JSON.stringify(this.aiVoiceProfiles));
-    } catch (e) {
-      console.warn('Could not save AI voice profiles', e);
     }
   }
 
@@ -825,7 +811,6 @@ export class ChatComponent implements OnInit {
       const setVoices = () => {
         this.voices = synth.getVoices() || [];
         this.selectPreferredVoice();
-        this.refreshVoiceProfiles();
       };
 
       setVoices();
@@ -863,12 +848,6 @@ export class ChatComponent implements OnInit {
         if (foundByName) return foundByName;
       }
 
-      const aiProfile = this.aiVoiceProfiles[characterId];
-      if (aiProfile) {
-        const aiMatch = this.findVoiceByProfile(aiProfile);
-        if (aiMatch) return aiMatch;
-      }
-
       const prefs = this.characterVoicePreferences[characterId];
       if (!prefs || prefs.length === 0) return this.preferredVoice;
 
@@ -886,36 +865,44 @@ export class ChatComponent implements OnInit {
   }
 
   private getSpeechSettings(characterId: string, character?: Character): { pitch: number; rate: number; volume: number } {
-    const aiProfile = this.aiVoiceProfiles[characterId];
-    if (aiProfile) {
-      return {
-        pitch: this.clampSpeechValue(aiProfile.pitch, 0.9, 1.08, 0.98),
-        rate: this.clampSpeechValue(aiProfile.rate, 0.9, 1.02, 0.94),
-        volume: this.clampSpeechValue(aiProfile.volume, 0.96, 1, 1)
-      };
-    }
+    let baseSettings: { pitch: number; rate: number; volume: number } | null = null;
 
     if (character) {
       const toneSettings = this.getToneSpeechSettings(character);
       if (toneSettings) {
-        return toneSettings;
+        baseSettings = toneSettings;
+      } else {
+        switch (character.id) {
+          case 'monk':
+            baseSettings = { pitch: 0.93, rate: 0.92, volume: 1 };
+            break;
+          case 'creative':
+            baseSettings = { pitch: 1.03, rate: 0.98, volume: 1 };
+            break;
+          case 'teacher':
+            baseSettings = { pitch: 0.97, rate: 0.93, volume: 1 };
+            break;
+          case 'mentor':
+            baseSettings = { pitch: 0.94, rate: 0.94, volume: 1 };
+            break;
+          default:
+            baseSettings = { pitch: 0.98, rate: 0.93, volume: 1 };
+            break;
+        }
       }
-
-      switch (character.id) {
-        case 'monk':
-          return { pitch: 0.93, rate: 0.92, volume: 1 };
-        case 'creative':
-          return { pitch: 1.03, rate: 0.98, volume: 1 };
-        case 'teacher':
-          return { pitch: 0.97, rate: 0.93, volume: 1 };
-        case 'mentor':
-          return { pitch: 0.94, rate: 0.94, volume: 1 };
-        default:
-          return { pitch: 0.98, rate: 0.93, volume: 1 };
-      }
+    } else {
+      baseSettings = { pitch: 0.98, rate: 0.93, volume: 1 };
     }
 
-    return { pitch: 0.98, rate: 0.93, volume: 1 };
+    const explicitPitch = character?.ttsPitch;
+    if (typeof explicitPitch === 'number' && Number.isFinite(explicitPitch)) {
+      return {
+        ...baseSettings,
+        pitch: this.clampSpeechValue(explicitPitch, 0.5, 2, baseSettings.pitch)
+      };
+    }
+
+    return baseSettings;
   }
 
   private getPreferredChunkLength(characterId: string, character?: Character): number {
@@ -935,108 +922,71 @@ export class ChatComponent implements OnInit {
     return 210;
   }
 
-  private findVoiceByProfile(profile: CharacterVoiceProfile): SpeechSynthesisVoice | null {
-    const scored = this.voices
-      .map(voice => ({
-        voice,
-        score: this.scoreVoice(voice, profile)
-      }))
-      .sort((a, b) => b.score - a.score);
+  private resolveGeminiVoiceSelection(selection: GeminiVoiceSelection | null): string | null {
+    const gender = this.normalizeGeminiGender(selection?.gender);
+    const directSelection = this.normalizeGeminiVoiceName(selection?.voiceName);
 
-    return scored[0] && scored[0].score > 0 ? scored[0].voice : null;
+    if (directSelection && GEMINI_ALLOWED_VOICES.has(directSelection)) {
+      return directSelection;
+    }
+
+    if (gender === 'male') {
+      return this.pickGeminiVoiceForGender('male');
+    }
+
+    if (gender === 'female') {
+      return this.pickGeminiVoiceForGender('female');
+    }
+
+    return directSelection && GEMINI_ALLOWED_VOICES.has(directSelection)
+      ? directSelection
+      : ChatComponent.DEFAULT_GEMINI_TTS_VOICE;
   }
 
-  private scoreVoice(voice: SpeechSynthesisVoice, profile: CharacterVoiceProfile): number {
-    let score = 0;
-    const voiceName = (voice.name || '').toLowerCase();
-    const voiceLang = (voice.lang || '').toLowerCase();
+  private resolveGeminiPitch(selection: GeminiVoiceSelection | null): number {
+    const gender = this.normalizeGeminiGender(selection?.gender);
+    const fallback = gender === 'male' ? 0.94 : gender === 'female' ? 1.0 : 0.97;
+    const pitch = Number(selection?.pitch);
 
-    profile.voiceHints.forEach((hint, index) => {
-      const normalizedHint = hint.toLowerCase();
-      if (normalizedHint && voiceName.includes(normalizedHint)) {
-        score += 12 - index;
-      }
-    });
-
-    profile.langHints.forEach((hint, index) => {
-      const normalizedHint = hint.toLowerCase();
-      if (normalizedHint && voiceLang.includes(normalizedHint)) {
-        score += 8 - index;
-      }
-    });
-
-    if (voice.default) {
-      score += 1;
+    if (!Number.isFinite(pitch)) {
+      return fallback;
     }
 
-    if (voiceLang.startsWith('en')) {
-      score += 1;
+    if (gender === 'male') {
+      return this.clampSpeechValue(pitch, 0.88, 0.98, fallback);
     }
 
-    return score;
+    if (gender === 'female') {
+      return this.clampSpeechValue(pitch, 0.98, 1.08, fallback);
+    }
+
+    return this.clampSpeechValue(pitch, 0.92, 1.02, fallback);
   }
 
-  private refreshVoiceProfiles(): void {
-    if (!this.voices.length || !this.aiService.hasApiKey()) {
-      return;
+  private normalizeGeminiGender(gender: GeminiVoiceSelection['gender'] | undefined): 'male' | 'female' | 'neutral' {
+    if (gender === 'male' || gender === 'female' || gender === 'neutral') {
+      return gender;
     }
 
-    const targetCharacterId = this.activeCharacterId || this.characters[0]?.id;
-    if (!targetCharacterId) {
-      return;
-    }
-
-    void this.ensureVoiceProfile(targetCharacterId);
+    return 'neutral';
   }
 
-  private async ensureVoiceProfile(characterId: string): Promise<void> {
-    if (!this.aiService.hasApiKey() || !this.voices.length || this.pendingVoiceProfileIds.has(characterId)) {
-      return;
+  private pickGeminiVoiceForGender(gender: 'male' | 'female'): string {
+    const ordered = gender === 'male'
+      ? ['Puck', 'Charon', 'Iapetus', 'Schedar', 'Fenrir', 'Zubenelgenubi', 'Zephyr', 'Gacrux']
+      : ['Kore', 'Aoede', 'Achernar', 'Enceladus', 'Leda'];
+
+    const selected = ordered.find(name => GEMINI_ALLOWED_VOICES.has(name));
+    return selected || ChatComponent.DEFAULT_GEMINI_TTS_VOICE;
+  }
+
+  private normalizeGeminiVoiceName(voiceName?: string | null): string {
+    const candidate = String(voiceName || '').trim();
+    if (!candidate) {
+      return '';
     }
 
-    if (!this.aiService.hasGeminiCapacity(1, 2)) {
-      return;
-    }
-
-    const character = this.characters.find(c => c.id === characterId);
-    if (!character) {
-      return;
-    }
-
-    const fingerprintHash = this.hashString(JSON.stringify({
-      name: character.name,
-      personality: character.personality,
-      tone: character.tone,
-      backstory: character.backstory,
-      systemPrompt: character.systemPrompt,
-      availableVoices: this.voices.map(v => `${v.name}|${v.lang}|${v.default}`)
-    }));
-
-    if (this.aiVoiceProfiles[characterId]?.updatedAt === fingerprintHash) {
-      return;
-    }
-
-    this.pendingVoiceProfileIds.add(characterId);
-    try {
-      const profile = await this.aiService.generateCharacterVoiceProfile(
-        character,
-        this.voices.map(voice => ({
-          name: voice.name,
-          lang: voice.lang,
-          default: voice.default
-        }))
-      );
-
-      if (profile) {
-        this.aiVoiceProfiles[characterId] = {
-          ...profile,
-          updatedAt: fingerprintHash
-        };
-        this.saveVoiceProfiles();
-      }
-    } finally {
-      this.pendingVoiceProfileIds.delete(characterId);
-    }
+    return ChatComponent.GEMINI_VOICE_OVERRIDES[candidate] || candidate;
   }
 
   private hashString(input: string): number {
@@ -1318,9 +1268,14 @@ export class ChatComponent implements OnInit {
     };
   }
 
-  private async playAudioBlobForMessage(msg: Message, audioBlob: Blob, provider: string): Promise<void> {
+  private async playAudioBlobForMessage(msg: Message, audioBlob: Blob, provider: string, pitch?: number): Promise<void> {
     const audioUrl = URL.createObjectURL(audioBlob);
     const audio = new Audio(audioUrl);
+
+    const playbackPitch = typeof pitch === 'number' && Number.isFinite(pitch)
+      ? this.clampSpeechValue(pitch, provider === 'Gemini TTS' ? 0.9 : 0.75, provider === 'Gemini TTS' ? 1.06 : 1.25, 1)
+      : 1;
+    audio.playbackRate = playbackPitch;
 
     this.cleanupAudio();
     this.audioElement = audio;
@@ -1353,12 +1308,14 @@ export class ChatComponent implements OnInit {
 
     this.stopSpeaking();
 
+    const character = this.characters.find(c => c.id === msg.characterId);
+    const speechSettings = this.getSpeechSettings(msg.characterId, character);
     const cachedBlob = this.messageAudioCache.get(msg.id);
     if (cachedBlob) {
       this.ttsLoadingMessageId = null;
       this.cdr.detectChanges();
       try {
-        await this.playAudioBlobForMessage(msg, cachedBlob, 'Gemini TTS');
+        await this.playAudioBlobForMessage(msg, cachedBlob, 'Gemini TTS', speechSettings.pitch);
       } catch (error: any) {
         this.currentSpeakingMessageId = null;
         this.cleanupAudio();
@@ -1372,8 +1329,8 @@ export class ChatComponent implements OnInit {
     this.cdr.detectChanges();
 
     try {
-      const voiceForGemini = this.resolveGeminiVoiceName(msg.characterId);
-      const localeForGemini = this.resolveGeminiLocale(msg.characterId);
+      const voiceForGemini = this.resolveGeminiVoiceName(msg.characterId, character);
+      const localeForGemini = this.resolveGeminiLocale(msg.characterId, character);
 
       const audioBlob = await this.ttsFactory.generateAudioBlob({
         text,
@@ -1383,7 +1340,7 @@ export class ChatComponent implements OnInit {
 
       this.messageAudioCache.set(msg.id, audioBlob);
       this.ttsLoadingMessageId = null;
-      await this.playAudioBlobForMessage(msg, audioBlob, 'Gemini TTS');
+      await this.playAudioBlobForMessage(msg, audioBlob, 'Gemini TTS', speechSettings.pitch);
     } catch (error: any) {
       this.ttsLoadingMessageId = null;
       this.currentSpeakingMessageId = null;
@@ -1400,8 +1357,10 @@ export class ChatComponent implements OnInit {
       return;
     }
 
+    const character = this.characters.find(c => c.id === msg.characterId);
+    const speechSettings = this.getSpeechSettings(msg.characterId, character);
     this.stopSpeaking();
-    await this.playAudioBlobForMessage(msg, cachedBlob, 'Gemini TTS');
+    await this.playAudioBlobForMessage(msg, cachedBlob, 'Gemini TTS', speechSettings.pitch);
   }
 
   private describeRemoteTtsFailure(provider: string, error: unknown): string {
@@ -1422,23 +1381,21 @@ export class ChatComponent implements OnInit {
     return `${provider} is unavailable right now.`;
   }
 
-  private resolveGeminiVoiceName(characterId: string): string | null {
-    const profile = this.aiVoiceProfiles[characterId];
-    const hint = profile?.voiceHints?.map(value => String(value || '').trim()).find(Boolean);
-    if (!hint) {
-      return null;
+  private resolveGeminiVoiceName(_characterId: string, character?: Character): string | null {
+    const directSelection = this.normalizeGeminiVoiceName(character?.ttsVoiceName);
+    if (directSelection && GEMINI_ALLOWED_VOICES.has(directSelection)) {
+      return directSelection;
     }
-
-    const exactMatch = Array.from(ChatComponent.GEMINI_ALLOWED_VOICES).find(
-      voice => voice.toLowerCase() === hint.toLowerCase()
-    );
-    return exactMatch || null;
+    return directSelection || ChatComponent.DEFAULT_GEMINI_TTS_VOICE;
   }
 
-  private resolveGeminiLocale(characterId: string): string | null {
-    const profile = this.aiVoiceProfiles[characterId];
-    const hint = profile?.langHints?.map(value => String(value || '').trim()).find(Boolean);
-    return hint || null;
+  private resolveGeminiLocale(characterId: string, character?: Character): string | null {
+    const directSelection = String(character?.ttsLanguageCode || '').trim();
+    if (directSelection) {
+      return directSelection;
+    }
+
+    return null;
   }
 
   private base64ToBytes(base64: string): Uint8Array {

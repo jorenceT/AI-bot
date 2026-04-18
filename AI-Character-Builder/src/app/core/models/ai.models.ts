@@ -17,8 +17,13 @@ export interface Character {
   avatar?: string;
   isActive: boolean;
   greetingsEnabled?: boolean;
+  shortAnswers?: boolean;
   // optional voice name selected for this character (browser voice.name)
   voice?: string | null;
+  // optional Gemini TTS voice settings
+  ttsVoiceName?: string | null;
+  ttsLanguageCode?: string | null;
+  ttsPitch?: number | null;
 }
 
 export interface ChatSession {

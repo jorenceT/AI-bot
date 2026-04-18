@@ -66,6 +66,98 @@
       </label>
     </div>
 
+    <div
+      class="voice-settings-card"
+      [class.is-active]="hasVoiceSettings"
+    >
+      <div class="voice-settings-header">
+        <div>
+          <div class="voice-settings-title">Google TTS voice settings</div>
+          <div class="voice-settings-help">
+            Pitch changes the spoken playback when the app uses speech engines that support it. Gemini audio generation itself does not expose a pitch field.
+          </div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>Voice</label>
+        <select [(ngModel)]="tempCharacter.ttsVoiceName">
+          <option value="">Default voice</option>
+          <option *ngFor="let voice of geminiVoiceOptions" [value]="voice.name">
+            {{ voice.name }} - {{ voice.style }} - {{ voice.gender }}
+          </option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <label>Language</label>
+        <select [(ngModel)]="tempCharacter.ttsLanguageCode">
+          <option value="">Default language</option>
+          <option value="de-DE">de-DE</option>
+          <option value="en-AU">en-AU</option>
+          <option value="en-GB">en-GB</option>
+          <option value="en-IN">en-IN</option>
+          <option value="en-US">en-US</option>
+          <option value="es-US">es-US</option>
+          <option value="fr-FR">fr-FR</option>
+          <option value="hi-IN">hi-IN</option>
+          <option value="pt-BR">pt-BR</option>
+          <option value="ar-XA">ar-XA</option>
+          <option value="es-ES">es-ES</option>
+          <option value="fr-CA">fr-CA</option>
+          <option value="id-ID">id-ID</option>
+          <option value="it-IT">it-IT</option>
+          <option value="ja-JP">ja-JP</option>
+          <option value="tr-TR">tr-TR</option>
+          <option value="vi-VN">vi-VN</option>
+          <option value="bn-IN">bn-IN</option>
+          <option value="gu-IN">gu-IN</option>
+          <option value="kn-IN">kn-IN</option>
+          <option value="ml-IN">ml-IN</option>
+          <option value="mr-IN">mr-IN</option>
+          <option value="ta-IN">ta-IN</option>
+          <option value="te-IN">te-IN</option>
+          <option value="nl-NL">nl-NL</option>
+          <option value="ko-KR">ko-KR</option>
+          <option value="cmn-CN">cmn-CN</option>
+          <option value="pl-PL">pl-PL</option>
+          <option value="ru-RU">ru-RU</option>
+          <option value="th-TH">th-TH</option>
+        </select>
+      </div>
+
+      <div class="form-row pitch-row">
+        <div class="pitch-row-header">
+          <label>Pitch</label>
+          <span class="pitch-value">{{ pitchSliderValue | number:'1.2-2' }}</span>
+        </div>
+        <input
+          type="range"
+          min="0.5"
+          max="2"
+          step="0.01"
+          [ngModel]="pitchSliderValue"
+          (ngModelChange)="onPitchChange($event)"
+        />
+        <div class="pitch-help">
+          Lower values sound deeper. Higher values sound brighter.
+        </div>
+      </div>
+    </div>
+
+    <div class="short-answer-card" [class.is-active]="tempCharacter.shortAnswers === true">
+      <label class="short-answer-toggle">
+        <input type="checkbox" [(ngModel)]="tempCharacter.shortAnswers" />
+        <span class="short-answer-toggle-box" aria-hidden="true"></span>
+        <span class="short-answer-copy">
+          <span class="short-answer-title">Short responses</span>
+          <span class="short-answer-help">
+            Make this character reply briefly and directly.
+          </span>
+        </span>
+      </label>
+    </div>
+
     <div class="modal-buttons">
       <button (click)="onSave()" class="btn-primary">{{ editingCharacter ? 'Save' : 'Add' }}</button>
       <button (click)="onCancel()" class="btn-secondary">Cancel</button>

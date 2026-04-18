@@ -90,7 +90,7 @@
     *ngIf="showCharacterDialog"
     [editingCharacter]="editingCharacter"
     [isFamousPersonCharacter]="isFamousPersonCharacter"
-    (save)="saveCharacter()"
+    (save)="saveCharacter($event)"
     (cancel)="closeCharacterDialog()"
     (delete)="deleteCharacter($event)"
     (famousPersonToggle)="isFamousPersonCharacter = $event"

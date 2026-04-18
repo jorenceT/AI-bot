@@ -7,11 +7,3 @@ export interface AiService {
   isAvailable(): Promise<boolean>;
   getName(): string;
 }
-
-export interface CharacterVoiceProfile {
-  voiceHints: string[];
-  langHints: string[];
-  rate: number;
-  pitch: number;
-  volume: number;
-}

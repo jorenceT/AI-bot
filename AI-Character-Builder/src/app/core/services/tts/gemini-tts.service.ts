@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { TtsService, TtsOptions } from './tts.interface';
+import { GEMINI_ALLOWED_VOICES } from '../../models/gemini-voice-catalog';
 
 export interface GeminiTtsConfig {
   apiKey: string;
@@ -13,21 +14,6 @@ export interface GeminiTtsConfig {
   providedIn: 'root'
 })
 export class GeminiTtsService implements TtsService {
-  private static readonly ALLOWED_VOICES = new Set([
-    'Puck',
-    'Enceladus',
-    'Kore',
-    'Zephyr',
-    'Aoede',
-    'Fenrir',
-    'Achernar',
-    'Schedar',
-    'Zubenelgenubi',
-    'Charon',
-    'Leda',
-    'Gacrux',
-    'Iapetus'
-  ]);
   private config: GeminiTtsConfig | null = null;
   private currentAudio: HTMLAudioElement | null = null;
 
@@ -212,10 +198,10 @@ export class GeminiTtsService implements TtsService {
       return this.config?.voice || 'Kore';
     }
 
-    const exactMatch = Array.from(GeminiTtsService.ALLOWED_VOICES).find(
+    const exactMatch = Array.from(GEMINI_ALLOWED_VOICES).find(
       allowed => allowed.toLowerCase() === candidate.toLowerCase()
     );
 
-    return exactMatch || (this.config?.voice && GeminiTtsService.ALLOWED_VOICES.has(this.config.voice) ? this.config.voice : 'Kore');
+    return exactMatch || (this.config?.voice && GEMINI_ALLOWED_VOICES.has(this.config.voice) ? this.config.voice : 'Kore');
   }
 }

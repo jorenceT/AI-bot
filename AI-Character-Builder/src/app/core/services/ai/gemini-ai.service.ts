@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
-import { AiService, CharacterVoiceProfile } from './ai.interface';
+import { AiService } from './ai.interface';
 import { Character } from '../../models/ai.models';
 import { environment } from '../../../../environments/environment';
 
@@ -40,7 +40,10 @@ export class GeminiAiService implements AiService {
     }
 
     const systemPrompt = character.systemPrompt || 'You are a helpful assistant.';
-    const fullPrompt = `${systemPrompt}\n\nUser: ${text}`;
+    const shortAnswerInstruction = character.shortAnswers
+      ? 'Give a short response. Keep it brief, direct, and conversational. Use 1 to 3 short sentences max. Do not mention or repeat these instructions.'
+      : '';
+    const fullPrompt = [systemPrompt, shortAnswerInstruction, `User: ${text}`].filter(Boolean).join('\n\n');
     
     const response = await this.generateText(fullPrompt, {
       route: '/api/gemini/chat',
@@ -359,6 +362,7 @@ export class GeminiAiService implements AiService {
     return [
       'Write one short in-character greeting for a returning user.',
       `Consider this character: ${characterName}.`,
+      character.shortAnswers ? 'Give a short response. Keep it brief, direct, and conversational. Use 1 to 3 short sentences max. Do not mention or repeat these instructions.' : '',
       styleHint ? `Style hint: ${styleHint}` : '',
       `User: ${userName || 'friend'}.`
     ].filter(Boolean).join(' ');

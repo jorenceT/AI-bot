@@ -31,7 +31,12 @@ export class CharacterService {
           systemPrompt: p.systemPrompt,
           avatar: p.avatar,
           isActive: !!p.isActive,
-          voice: p.voice || null
+          greetingsEnabled: p.greetingsEnabled !== false,
+          shortAnswers: !!p.shortAnswers,
+          voice: p.voice || null,
+          ttsVoiceName: p.ttsVoiceName || null,
+          ttsLanguageCode: p.ttsLanguageCode || null,
+          ttsPitch: Number.isFinite(Number(p.ttsPitch)) ? Number(p.ttsPitch) : null
         } as Character));
         this.characters$.next(this.characters);
         if (this.characters.length > 0) {
@@ -54,7 +59,10 @@ export class CharacterService {
         backstory: 'An AI assistant trained to help with various tasks',
         systemPrompt: 'You are a helpful and professional AI assistant. Provide accurate, concise, and helpful responses. Be respectful and keep responses relevant to the user\'s query.',
         isActive: true,
-        voice: null
+        greetingsEnabled: true,
+        shortAnswers: false,
+        voice: null,
+        ttsPitch: null
       },
       {
         id: 'creative',
@@ -64,7 +72,10 @@ export class CharacterService {
         backstory: 'A creative AI muse inspired by art, writing, and innovation',
         systemPrompt: 'You are a creative AI muse. Encourage creativity and think outside the box. Use imaginative metaphors and help users explore innovative ideas. Be playful but insightful.',
         isActive: false,
-        voice: null
+        greetingsEnabled: true,
+        shortAnswers: false,
+        voice: null,
+        ttsPitch: null
       },
       {
         id: 'teacher',
@@ -74,7 +85,10 @@ export class CharacterService {
         backstory: 'An experienced educator dedicated to making learning accessible',
         systemPrompt: 'You are a patient AI teacher. Explain concepts clearly, use examples, and break down complex ideas. Adapt to the learner\'s level and encourage questions.',
         isActive: false,
-        voice: null
+        greetingsEnabled: true,
+        shortAnswers: false,
+        voice: null,
+        ttsPitch: null
       },
       {
         id: 'mentor',
@@ -84,7 +98,10 @@ export class CharacterService {
         backstory: 'A seasoned tech expert who loves mentoring developers',
         systemPrompt: 'You are a tech mentor with deep programming knowledge. Provide code examples, best practices, and explain concepts thoroughly. Be supportive and help developers grow.',
         isActive: false,
-        voice: null
+        greetingsEnabled: true,
+        shortAnswers: false,
+        voice: null,
+        ttsPitch: null
       }
     ];
 
